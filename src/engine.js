@@ -165,9 +165,9 @@ export class SpatialPhysicsEngine {
 // 2. ZONE CHUNK STREAMER & CSS2D DOM CULLER (Mobile/Web GPU & DOM Booster)
 // ============================================================================
 export class ZoneChunkStreamer {
-  constructor() {
-    this.activeMeshRadius = 265; // Stream 3D Geodes across the active biome vista
-    this.activeCrystalRadius = 185;
+  constructor(isMobile = false) {
+    this.activeMeshRadius = isMobile ? 195 : 265; // Stream 3D Geodes across the active biome vista
+    this.activeCrystalRadius = isMobile ? 140 : 185;
     this.tick = 0;
   }
 
@@ -265,9 +265,11 @@ export class UnifiedInputEngine {
     this.keys = {};
     this.mouseDown = false;
     this.eHeld = false;
+    this.bonkHeld = false;
     this.joyX = 0;
     this.joyY = 0;
     this.touchJump = false;
+    this.lastCamDragAt = -10;
 
     // Auto-pilot / Tap-to-Walk & Tap-to-Act state for Mobile & Web
     this.autoTarget = null; // { pos: Vector3, kind: 'move'|'geode'|'interact', ref: any }
@@ -275,6 +277,14 @@ export class UnifiedInputEngine {
     this.ndc = new THREE.Vector2();
 
     this._bindAll();
+  }
+
+  haptic(pattern = 10) {
+    try {
+      if (this.engine.isTouch && navigator.vibrate) navigator.vibrate(pattern);
+    } catch (e) {
+      /* ignore */
+    }
   }
 
   clearAutoTarget() {
@@ -358,8 +368,8 @@ export class UnifiedInputEngine {
     }
   }
 
-  /** Handle a 3D World Tap on Mobile or Click on Web to auto-walk & interact/bonk */
-  handleWorldTap(clientX, clientY) {
+  /** Handle a 3D World Tap on Mobile or Click on Web to auto-walk & interact/bonk/move */
+  handleWorldTap(clientX, clientY, allowGroundMove = true) {
     const g = this.game;
     if (!g.started || g.ui.panelOpen || !g.player || g.player.stun > 0) return false;
 
@@ -370,12 +380,12 @@ export class UnifiedInputEngine {
     const p = g.player;
     const ray = this.raycaster.ray;
 
-    // Check if the tap ray passes near any interactive 3D object (Geode, Boss, Vault, Upgrade Pad, Lock Slab, Portal)
+    // 1. Check if the click/tap ray passes near any interactive 3D object (Geode, Rival, Boss, Gate, Vault, Upgrade Pad, Lock Slab, Forge)
     let bestTarget = null;
-    let bestDist = 2.4; // Ray-to-sphere threshold
+    let bestDist = 2.6; // Generous ray-to-sphere threshold for easy clicking/tapping
 
     const testSphere = (pos, radius, kind, ref) => {
-      if (pos.distanceTo(p.pos) > 95) return;
+      if (!pos || pos.distanceTo(p.pos) > 110) return;
       const center = new THREE.Vector3(pos.x, pos.y + 1.0, pos.z);
       const d = ray.distanceToPoint(center);
       if (d < radius && d < bestDist) {
@@ -385,29 +395,76 @@ export class UnifiedInputEngine {
     };
 
     for (const n of g.nodes) {
-      if (n.alive && n.mesh.visible) testSphere(n.pos, n.r + 1.1, 'geode', n);
+      if (n.alive && n.mesh.visible) testSphere(n.pos, n.r + 1.25, 'geode', n);
+    }
+    if (!p.isInSafeHub) {
+      for (const o of g.actors) {
+        if (o !== p && o.stun <= 0 && !o.isInSafeHub) {
+          testSphere(o.pos, 1.85, 'actor', o);
+        }
+      }
     }
     if (g.bosses) {
       for (const b of g.bosses) {
-        if (b.alive) testSphere(b.pos, b.r + 1.4, 'boss', b);
+        if (b.alive) testSphere(b.pos, b.r + 1.5, 'boss', b);
       }
     }
     for (const ch of g.chests) {
-      if (ch.alive) testSphere(ch.pos, 1.8, 'chest', ch);
+      if (ch.alive) testSphere(ch.pos, 1.9, 'chest', ch);
     }
     if (p.camp) {
-      if (p.camp.upgradeWorld) testSphere(p.camp.upgradeWorld, 2.0, 'upgrade_base', p.camp);
-      if (p.camp.slabWorld) testSphere(p.camp.slabWorld, 2.0, 'lock_slab', p.camp);
+      if (p.camp.upgradeWorld) testSphere(p.camp.upgradeWorld, 2.1, 'upgrade_base', p.camp);
+      if (p.camp.slabWorld) testSphere(p.camp.slabWorld, 2.1, 'lock_slab', p.camp);
     }
     for (const c of g.camps) {
-      if (c !== p.camp && c.vaultWorld) testSphere(c.vaultWorld, 2.2, 'raid_vault', c);
+      if (c === p.camp) continue;
+      if (c.isLocked(g.now)) {
+        testSphere(c.boulderWorldPos(), 2.3, 'boulder_gate', c);
+      } else if (c.vaultWorld) {
+        testSphere(c.vaultWorld, 2.3, 'raid_vault', c);
+      }
     }
-    if (g.forgePos) testSphere(g.forgePos, 2.4, 'forge', null);
+    if (g.forgePos) testSphere(g.forgePos, 2.5, 'forge', null);
 
     if (bestTarget) {
       this.autoTarget = bestTarget;
       g.puff(bestTarget.pos, '#ffd615');
+      // If already within swing range of a clicked geode/actor/boss/gate, swing immediately too!
+      if (
+        ['geode', 'actor', 'boss', 'boulder_gate'].includes(bestTarget.kind) &&
+        bestTarget.pos.distanceTo(p.pos) < 3.4
+      ) {
+        this.applyMagneticAimAssist(p);
+        if (p.tryAttack()) g.sfx.whoosh();
+      }
       return true;
+    }
+
+    // 2. If clicked/tapped on open ground, intersect ray with ground plane and walk there!
+    if (allowGroundMove && ray.direction.y < -0.03) {
+      const tPlane = (p.pos.y - ray.origin.y) / ray.direction.y;
+      if (tPlane > 0.5 && tPlane < 140) {
+        const hitX = ray.origin.x + ray.direction.x * tPlane;
+        const hitZ = ray.origin.z + ray.direction.z * tPlane;
+        const dx = hitX - p.pos.x;
+        const dz = hitZ - p.pos.z;
+        const d = Math.hypot(dx, dz);
+        // If clicked very close to the player (< 2.6m), treat as an immediate club swing with aim assist
+        if (d < 2.6) {
+          this.applyMagneticAimAssist(p);
+          if (p.tryAttack()) g.sfx.whoosh();
+          return true;
+        }
+        const clampD = Math.min(d, 48);
+        const dest = new THREE.Vector3(
+          p.pos.x + (dx / d) * clampD,
+          p.pos.y,
+          p.pos.z + (dz / d) * clampD
+        );
+        this.autoTarget = { pos: dest, kind: 'move', ref: null };
+        g.puff(dest, '#42f54b');
+        return true;
+      }
     }
     return false;
   }
@@ -439,25 +496,38 @@ export class UnifiedInputEngine {
       };
     }
 
-    // If Tap-to-Act Auto-Pilot is active, steer Rok toward the tapped target and act on arrival!
+    // If Click/Tap-to-Act Auto-Pilot is active, steer Rok toward the target and act on arrival!
     if (this.autoTarget && p && p.stun <= 0) {
       const t = this.autoTarget;
       if (t.kind === 'geode' && (!t.ref || !t.ref.alive)) {
         this.autoTarget = null;
       } else if (t.kind === 'boss' && (!t.ref || !t.ref.alive)) {
         this.autoTarget = null;
+      } else if (t.kind === 'actor' && (!t.ref || t.ref.stun > 0 || t.ref.isInSafeHub)) {
+        this.autoTarget = null;
+      } else if (t.kind === 'boulder_gate' && (!t.ref || !t.ref.isLocked(g.now))) {
+        this.autoTarget = null;
       } else {
+        // Track moving targets dynamically (e.g. rival actors or bosses)
+        if (t.kind === 'actor' && t.ref) t.pos.copy(t.ref.pos);
+        if (t.kind === 'boss' && t.ref) t.pos.copy(t.ref.pos);
         const tx = t.pos.x - p.pos.x;
         const tz = t.pos.z - p.pos.z;
         const dist = Math.hypot(tx, tz);
         const stopDist =
-          t.kind === 'geode'
-            ? (t.ref?.r || 1.2) + 1.55
-            : t.kind === 'boss'
-              ? 2.6
-              : t.kind === 'lock_slab'
-                ? 0.6
-                : 2.1;
+          t.kind === 'move'
+            ? 0.65
+            : t.kind === 'geode'
+              ? (t.ref?.r || 1.2) + 1.55
+              : t.kind === 'actor'
+                ? 2.15
+                : t.kind === 'boss'
+                  ? 2.6
+                  : t.kind === 'boulder_gate'
+                    ? 2.25
+                    : t.kind === 'lock_slab'
+                      ? 0.6
+                      : 2.1;
 
         if (dist > stopDist) {
           return {
@@ -467,22 +537,26 @@ export class UnifiedInputEngine {
             manualMove: false,
           };
         } else {
-          // Arrived at tapped 3D object -> automatically BONK or INTERACT!
-          p.yaw = Math.atan2(tx, tz);
-          p.root.rotation.y = p.yaw;
-          if (t.kind === 'geode' || t.kind === 'boss') {
-            p.tryAttack();
-          } else if (t.kind === 'upgrade_base') {
-            g.upgradeBase(p);
+          // Arrived at clicked/tapped 3D object -> automatically BONK or INTERACT!
+          if (t.kind === 'move') {
             this.autoTarget = null;
-          } else if (t.kind === 'forge') {
-            g.ui.togglePanel('craft');
-            this.autoTarget = null;
-          } else if (t.kind === 'lock_slab') {
-            this.autoTarget = null;
-          } else if (t.kind === 'raid_vault' || t.kind === 'chest') {
-            this.eHeld = true;
-            this.autoTarget = null;
+          } else {
+            p.yaw = Math.atan2(tx, tz);
+            p.root.rotation.y = p.yaw;
+            if (t.kind === 'geode' || t.kind === 'boss' || t.kind === 'actor' || t.kind === 'boulder_gate') {
+              if (p.tryAttack()) g.sfx.whoosh();
+            } else if (t.kind === 'upgrade_base') {
+              g.upgradeBase(p);
+              this.autoTarget = null;
+            } else if (t.kind === 'forge') {
+              g.ui.togglePanel('craft');
+              this.autoTarget = null;
+            } else if (t.kind === 'lock_slab') {
+              this.autoTarget = null;
+            } else if (t.kind === 'raid_vault' || t.kind === 'chest') {
+              this.eHeld = true;
+              this.autoTarget = null;
+            }
           }
         }
       }
@@ -547,33 +621,27 @@ export class UnifiedInputEngine {
     const el = this.engine.renderer.domElement;
     const lbl = this.engine.labels.domElement;
 
-    // Desktop Mouse: supports BOTH PointerLock AND Click-Drag Camera Orbit (for embedded web / trackpads)
+    // Free-Cursor Desktop & Web Mouse Controls:
+    // - Never locks or hides the cursor!
+    // - Click on any Geode, Rival, Boss, Camp Pad, or Ground to walk there & auto-mine/bonk/interact
+    // - Drag (Left or Right mouse button) to orbit the camera whenever desired
     let isDraggingCam = false;
     let dragMoved = 0;
+    let downX = 0;
+    let downY = 0;
     let lastMouseX = 0;
     let lastMouseY = 0;
+    let downBtn = 0;
 
     const onDown = (e) => {
       if (g.isTouch) return;
       if (!g.started || g.ui.panelOpen) return;
-      if (e.button === 2 || e.button === 1) {
-        isDraggingCam = true;
-        dragMoved = 0;
-        lastMouseX = e.clientX;
-        lastMouseY = e.clientY;
-        return;
-      }
-      if (document.pointerLockElement !== el) {
-        isDraggingCam = true;
-        dragMoved = 0;
-        lastMouseX = e.clientX;
-        lastMouseY = e.clientY;
-        el.requestPointerLock && el.requestPointerLock();
-      }
-      if (e.button === 0) {
-        this.applyMagneticAimAssist(g.player);
-        g.player.tryAttack() && sfx.whoosh();
-      }
+      isDraggingCam = true;
+      dragMoved = 0;
+      downBtn = e.button;
+      downX = lastMouseX = e.clientX;
+      downY = lastMouseY = e.clientY;
+      sfx.unlock();
     };
 
     el.addEventListener('mousedown', onDown);
@@ -583,22 +651,27 @@ export class UnifiedInputEngine {
     });
 
     addEventListener('mousemove', (e) => {
-      if (document.pointerLockElement === el) {
-        g.cam.yaw -= e.movementX * 0.0028;
-        g.cam.pitch = THREE.MathUtils.clamp(g.cam.pitch + e.movementY * 0.0024, -0.25, 1.25);
-      } else if (isDraggingCam && g.started && !g.ui.panelOpen) {
-        const dx = e.clientX - lastMouseX;
-        const dy = e.clientY - lastMouseY;
-        lastMouseX = e.clientX;
-        lastMouseY = e.clientY;
-        dragMoved += Math.hypot(dx, dy);
-        g.cam.yaw -= dx * 0.0045;
-        g.cam.pitch = THREE.MathUtils.clamp(g.cam.pitch + dy * 0.0038, -0.25, 1.25);
+      if (!isDraggingCam || !g.started || g.ui.panelOpen) return;
+      const dx = e.clientX - lastMouseX;
+      const dy = e.clientY - lastMouseY;
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+      dragMoved += Math.hypot(dx, dy);
+      if (dragMoved > 6) {
+        this.lastCamDragAt = g.now || 0;
+        g.cam.yaw -= dx * 0.0048;
+        g.cam.pitch = THREE.MathUtils.clamp(g.cam.pitch + dy * 0.004, 0.12, 1.25);
       }
     });
 
-    addEventListener('mouseup', () => {
+    addEventListener('mouseup', (e) => {
+      if (!isDraggingCam) return;
       isDraggingCam = false;
+      if (g.isTouch || !g.started || g.ui.panelOpen) return;
+      // Clean click (not a camera drag) -> Click-to-Move / Click-to-Mine / Click-to-Bonk!
+      if (dragMoved <= 10 && downBtn === 0) {
+        this.handleWorldTap(downX, downY, true);
+      }
     });
 
     addEventListener(
@@ -621,12 +694,28 @@ export class UnifiedInputEngine {
       }
     };
 
-    // 1. Virtual Joystick (#touch-joy)
+    // 1. Virtual Joystick (#touch-joy) + Dynamic Left-Thumb Floating Zone
     const joyEl = document.getElementById('touch-joy');
     const stickEl = document.getElementById('touch-stick');
     let joyTouchId = null;
     let joyCenter = { x: 0, y: 0 };
-    const maxJoyR = 42;
+    const maxJoyR = 38;
+    const startJoyAt = (touch, floating = false) => {
+      joyTouchId = touch.identifier;
+      if (joyEl) {
+        if (floating) {
+          const half = joyEl.offsetWidth ? joyEl.offsetWidth / 2 : 45;
+          joyEl.style.left = `${Math.max(8, Math.min(window.innerWidth * 0.42 - half, touch.clientX - half))}px`;
+          joyEl.style.bottom = `${Math.max(8, Math.min(window.innerHeight * 0.48 - half, window.innerHeight - touch.clientY - half))}px`;
+          joyCenter = { x: touch.clientX, y: touch.clientY };
+        } else {
+          const rect = joyEl.querySelector('.joy-ring').getBoundingClientRect();
+          joyCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        }
+        joyEl.classList.add('active');
+      }
+      updateJoy(touch.clientX, touch.clientY);
+    };
     const updateJoy = (clientX, clientY) => {
       const dx = clientX - joyCenter.x;
       const dy = clientY - joyCenter.y;
@@ -645,7 +734,11 @@ export class UnifiedInputEngine {
       this.joyX = 0;
       this.joyY = 0;
       if (stickEl) stickEl.style.transform = 'translate(0px, 0px)';
-      if (joyEl) joyEl.classList.remove('active');
+      if (joyEl) {
+        joyEl.classList.remove('active');
+        joyEl.style.left = '';
+        joyEl.style.bottom = '';
+      }
     };
     if (joyEl) {
       joyEl.addEventListener(
@@ -655,12 +748,7 @@ export class UnifiedInputEngine {
           e.preventDefault();
           e.stopPropagation();
           sfx.unlock();
-          const t = e.changedTouches[0];
-          joyTouchId = t.identifier;
-          const rect = joyEl.querySelector('.joy-ring').getBoundingClientRect();
-          joyCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-          joyEl.classList.add('active');
-          updateJoy(t.clientX, t.clientY);
+          startJoyAt(e.changedTouches[0], false);
         },
         { passive: false }
       );
@@ -689,7 +777,7 @@ export class UnifiedInputEngine {
       joyEl.addEventListener('touchcancel', resetJoy);
     }
 
-    // 2. Touch Camera Drag, Pinch-to-Zoom & Tap-on-3D-World to Auto-Walk/Act!
+    // 2. Touch Camera Drag, Pinch-to-Zoom, Dynamic Left-Thumb Joystick & Tap-on-3D-World!
     let camTouchId = null;
     let lastCamX = 0;
     let lastCamY = 0;
@@ -705,7 +793,7 @@ export class UnifiedInputEngine {
       (e) => {
         markTouch();
         if (!g.started || g.ui.panelOpen) return;
-        if (e.touches.length === 2) {
+        if (e.touches.length === 2 && joyTouchId === null) {
           const dx = e.touches[0].clientX - e.touches[1].clientX;
           const dy = e.touches[0].clientY - e.touches[1].clientY;
           pinchStartDist = Math.hypot(dx, dy);
@@ -719,7 +807,18 @@ export class UnifiedInputEngine {
                   '#touch-joy, #touch-actions, #hotbar, #topleft, #quest-box, #minimap, #quick-forge, .panel'
                 )
               : null;
-          if (!tag && camTouchId === null) {
+          if (tag) continue;
+          // Lower-left thumb zone automatically engages floating virtual joystick if not already active!
+          if (
+            joyTouchId === null &&
+            t.clientX < window.innerWidth * 0.42 &&
+            t.clientY > window.innerHeight * 0.56
+          ) {
+            sfx.unlock();
+            startJoyAt(t, true);
+            continue;
+          }
+          if (camTouchId === null) {
             camTouchId = t.identifier;
             lastCamX = camTouchStartX = t.clientX;
             lastCamY = camTouchStartY = t.clientY;
@@ -737,7 +836,15 @@ export class UnifiedInputEngine {
       'touchmove',
       (e) => {
         if (!g.started || g.ui.panelOpen) return;
-        if (e.touches.length === 2 && pinchStartDist > 10) {
+        if (joyTouchId !== null) {
+          for (const t of e.changedTouches) {
+            if (t.identifier === joyTouchId) {
+              updateJoy(t.clientX, t.clientY);
+              break;
+            }
+          }
+        }
+        if (e.touches.length === 2 && pinchStartDist > 10 && joyTouchId === null) {
           const dx = e.touches[0].clientX - e.touches[1].clientX;
           const dy = e.touches[0].clientY - e.touches[1].clientY;
           const curDist = Math.hypot(dx, dy);
@@ -753,7 +860,8 @@ export class UnifiedInputEngine {
             lastCamX = t.clientX;
             lastCamY = t.clientY;
             camTouchMoved += Math.hypot(dx, dy);
-            g.cam.yaw -= dx * 0.0055;
+            if (camTouchMoved > 8) this.lastCamDragAt = g.now || 0;
+            g.cam.yaw -= dx * 0.0058;
             g.cam.pitch = THREE.MathUtils.clamp(g.cam.pitch + dy * 0.0045, -0.25, 1.25);
             break;
           }
@@ -764,27 +872,32 @@ export class UnifiedInputEngine {
 
     const endCamTouch = (e) => {
       if (e.touches.length < 2) pinchStartDist = 0;
-      if (camTouchId === null) return;
       for (const t of e.changedTouches) {
+        if (t.identifier === joyTouchId) {
+          resetJoy();
+        }
         if (t.identifier === camTouchId) {
           const dtMs = performance.now() - camTouchStartTime;
           // Quick tap on the 3D viewport -> Raycast Tap-to-Act / Auto-Bonk!
           if (camTouchMoved < 14 && dtMs < 320 && g.started && !g.ui.panelOpen) {
             if (!this.handleWorldTap(camTouchStartX, camTouchStartY)) {
-              // If tapped in open space near a target, swing club with magnetic aim assist!
               this.applyMagneticAimAssist(g.player);
-              g.player.tryAttack() && sfx.whoosh();
+              if (g.player.tryAttack()) {
+                sfx.whoosh();
+                this.haptic(10);
+              }
+            } else {
+              this.haptic(8);
             }
           }
           camTouchId = null;
-          break;
         }
       }
     };
     addEventListener('touchend', endCamTouch, { passive: true });
     addEventListener('touchcancel', endCamTouch, { passive: true });
 
-    // 3. Touch Action Buttons (BONK, JUMP, ACT / HOLD [E], plus Trap hotbar slot & Prompt)
+    // 3. Touch Action Buttons (BONK with Hold-to-Auto-Swing, JUMP, ACT / HOLD [E], plus Trap hotbar slot & Prompt)
     const bindHoldBtn = (btn, onPress, onRelease) => {
       if (!btn) return;
       btn.addEventListener(
@@ -809,19 +922,31 @@ export class UnifiedInputEngine {
       btn.addEventListener('mousedown', (e) => {
         e.stopPropagation();
         sfx.unlock();
+        btn.classList.add('pressed');
         onPress();
       });
       btn.addEventListener('mouseup', () => {
+        btn.classList.remove('pressed');
         if (onRelease) onRelease();
       });
     };
 
-    bindHoldBtn(document.getElementById('btn-touch-bonk'), () => {
-      if (g.started && !g.ui.panelOpen) {
-        this.applyMagneticAimAssist(g.player);
-        g.player.tryAttack() && sfx.whoosh();
+    bindHoldBtn(
+      document.getElementById('btn-touch-bonk'),
+      () => {
+        this.bonkHeld = true;
+        if (g.started && !g.ui.panelOpen) {
+          this.applyMagneticAimAssist(g.player);
+          if (g.player.tryAttack()) {
+            sfx.whoosh();
+            this.haptic(12);
+          }
+        }
+      },
+      () => {
+        this.bonkHeld = false;
       }
-    });
+    );
     bindHoldBtn(
       document.getElementById('btn-touch-jump'),
       () => {
@@ -928,28 +1053,16 @@ export class BoogaEngine {
       1250
     );
 
-    // 4. Post-Processing Pipeline (Desktop High-FX vs Fast Mobile Direct Render)
+    // 4. Post-Processing Pipeline (Desktop High-FX vs Zero-Overhead Mobile Direct Render)
     this.fx = !this.isMobile;
-    const rt = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
-      type: THREE.HalfFloatType,
-      samples: this.isMobile ? 0 : 4,
-    });
-    this.composer = new EffectComposer(this.renderer, rt);
-    this.composer.setPixelRatio(Math.min(this.currentDpr, 1.5));
-    this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.28,
-      0.5,
-      1.05
-    );
-    this.composer.addPass(this.bloom);
-    this.composer.addPass(new OutputPass());
-    this.composer.addPass(new ShaderPass(GradeShader));
+    this.composer = null;
+    if (!this.isMobile) {
+      this._initComposer();
+    }
 
     // 5. Engine Subsystems
     this.physics = new SpatialPhysicsEngine(18);
-    this.streamer = new ZoneChunkStreamer();
+    this.streamer = new ZoneChunkStreamer(this.isMobile);
     this.clock = new THREE.Clock();
 
     // Adaptive FPS Monitor
@@ -987,8 +1100,29 @@ export class BoogaEngine {
     return this.input;
   }
 
+  _initComposer() {
+    if (this.composer) return;
+    const rt = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
+      type: THREE.HalfFloatType,
+      samples: this.isMobile ? 0 : 4,
+    });
+    this.composer = new EffectComposer(this.renderer, rt);
+    this.composer.setPixelRatio(Math.min(this.currentDpr, 1.5));
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.bloom = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.28,
+      0.5,
+      1.05
+    );
+    this.composer.addPass(this.bloom);
+    this.composer.addPass(new OutputPass());
+    this.composer.addPass(new ShaderPass(GradeShader));
+  }
+
   toggleQuality() {
     this.fx = !this.fx;
+    if (this.fx && !this.composer) this._initComposer();
     this.renderer.shadowMap.enabled = true;
     if (this.game && this.game.ui) {
       this.game.ui.toast(

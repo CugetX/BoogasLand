@@ -40,13 +40,11 @@ export class UI {
     const btnSwitch = $('#btn-map-switch');
     if (btnSwitch) btnSwitch.onclick = () => {
       game.switchMode(game.mode === 'tutorial' ? 'valley' : 'tutorial', game.tutGraduated);
-      if (!game.isTouch) game.renderer.domElement.requestPointerLock && game.renderer.domElement.requestPointerLock();
     };
     const btnVicValley = $('#btn-vic-valley');
     if (btnVicValley) btnVicValley.onclick = () => {
       this.closePanels();
       game.switchMode('valley', true);
-      if (!game.isTouch) game.renderer.domElement.requestPointerLock && game.renderer.domElement.requestPointerLock();
     };
     const btnVicStay = $('#btn-vic-stay');
     if (btnVicStay) btnVicStay.onclick = () => this.closePanels();
@@ -55,7 +53,7 @@ export class UI {
     document.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => this.togglePanel(b.dataset.open)));
     if (this.mm) {
       this.mm.style.cursor = 'pointer';
-      this.mm.title = 'Click to open the Boogas World Map & Fast-Travel [M]';
+      this.mm.title = 'Click/Tap to open the Boogas World Map & Fast-Travel [M]';
       this.mm.onclick = () => this.togglePanel('map');
     }
     const hbBase = $('#hb-base');
@@ -67,9 +65,8 @@ export class UI {
     this.mapImg = new Image();
     this.mapImg.src = '/assets/booga_map.png';
     this.mapImg.onload = () => this.buildBg();
-    document.addEventListener('pointerlockchange', () => {
-      $('#clickhint').classList.toggle('hidden', game.isTouch || !!document.pointerLockElement || !game.started || this.panelOpen);
-    });
+    const ch = $('#clickhint');
+    if (ch) ch.classList.add('hidden');
     this.buildBg();
     this.updateModeButton();
   }
@@ -92,14 +89,11 @@ export class UI {
     this.closePanels();
     this.panel = name;
     $(`#panel-${name}`).classList.remove('hidden');
-    document.exitPointerLock && document.exitPointerLock();
     this.refreshPanels();
   }
   closePanels() {
     document.querySelectorAll('.panel').forEach((p) => p.classList.add('hidden'));
-    const was = this.panel;
     this.panel = null;
-    if (was && this.g.started && !this.g.isTouch) this.g.renderer.domElement.requestPointerLock && this.g.renderer.domElement.requestPointerLock();
   }
 
   refreshPanels() {

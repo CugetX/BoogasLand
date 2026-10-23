@@ -126,7 +126,7 @@ export class Game {
     this.clock = this.engine.clock;
     this.isTouch = this.engine.isTouch;
 
-    this.cam = { yaw: Math.PI, pitch: 0.38, dist: 9 };
+    this.cam = { yaw: Math.PI, pitch: 0.48, dist: 10.6 };
 
     const urlMode = new URLSearchParams(location.search).get('mode');
     this.initWorld(urlMode === 'tutorial' ? 'tutorial' : 'valley');
@@ -1931,7 +1931,6 @@ export class Game {
     this.started = true;
     document.body.classList.add('playing');
     this.ui.showHud();
-    if (!this.isTouch) this.renderer.domElement.requestPointerLock && this.renderer.domElement.requestPointerLock();
     sfx.unlock();
   }
 
@@ -2106,6 +2105,13 @@ export class Game {
       const { dx, dz, jump, manualMove } = this.engine.input.sampleMovement(dt);
       if (manualMove && p.hold) p.hold = null;
       p.physics(dt, dx, dz, jump);
+      if (this.input.bonkHeld && p.stun <= 0) {
+        this.input.applyMagneticAimAssist(p);
+        if (p.tryAttack()) {
+          sfx.whoosh();
+          this.input.haptic(10);
+        }
+      }
       // hold interactions
       const it = this.findInteraction(p);
       this.currentInteraction = it;
@@ -2958,10 +2964,19 @@ export class Game {
   updateCamera(dt) {
     const p = this.player.pos;
     const c = this.cam;
+    if (this.started && this.player && this.player.stun <= 0) {
+      const moved = Math.hypot(p.x - this.player.prev.x, p.z - this.player.prev.z);
+      const sinceManualDrag = this.now - (this.input?.lastCamDragAt ?? -10);
+      if (moved > 0.02 && sinceManualDrag > 1.8) {
+        const desiredYaw = this.player.yaw + Math.PI;
+        let diff = Math.atan2(Math.sin(desiredYaw - c.yaw), Math.cos(desiredYaw - c.yaw));
+        c.yaw += diff * Math.min(1, dt * 1.35);
+      }
+    }
     if (this.camPunch > 0) this.camPunch = Math.max(0, this.camPunch - dt * 1.8);
     const shakeX = this.camPunch > 0 ? (Math.random() - 0.5) * this.camPunch * 1.2 : 0;
     const shakeY = this.camPunch > 0 ? (Math.random() - 0.5) * this.camPunch * 1.2 : 0;
-    const target = new THREE.Vector3(p.x + shakeX, p.y + 1.7 + shakeY, p.z);
+    const target = new THREE.Vector3(p.x + shakeX, p.y + 1.65 + shakeY, p.z);
     const off = new THREE.Vector3(Math.sin(c.yaw) * Math.cos(c.pitch), Math.sin(c.pitch), Math.cos(c.yaw) * Math.cos(c.pitch)).multiplyScalar(c.dist);
     const pos = target.clone().add(off);
     const gh = heightAt(pos.x, pos.z) + 0.6;
