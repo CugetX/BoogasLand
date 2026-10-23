@@ -532,6 +532,12 @@ export class UI {
   update(dt) {
     const g = this.g, p = g.player;
     if (!g.started) return;
+    const setHtml = (el, html) => {
+      if (el && el._lastHtml !== html) {
+        el._lastHtml = html;
+        el.innerHTML = html;
+      }
+    };
     // Camp Vault Dust (safe banked Dust)
     const d = Math.floor(p.dust);
     if (d !== this.lastDust) {
@@ -580,18 +586,18 @@ export class UI {
     if (lk) lk.classList.add('hidden');
     // hotbar (progressively reveal buttons as tutorial cards introduce them)
     const w = p.weapon;
-    $('#hb-weapon').innerHTML = w ? `${gearIcon(w)}<em>${GEAR[w].name}</em>` : `<span class="fist">Club</span><em>Club</em>`;
+    setHtml($('#hb-weapon'), w ? `${gearIcon(w)}<em>${GEAR[w].name}</em>` : `<span class="fist">Club</span><em>Club</em>`);
     const hbTrap = $('#hb-trap');
     if (hbTrap) {
       hbTrap.classList.toggle('hidden', curStep < 3 && p.traps <= 0);
-      hbTrap.innerHTML = `${gearIcon('trap')}<span>${p.traps}</span><em>Traps [G]</em>`;
+      setHtml(hbTrap, `${gearIcon('trap')}<span>${p.traps}</span><em>Traps [G]</em>`);
     }
     const hbSuit = $('#hb-boots');
     if (hbSuit) {
       const activeSuit = p.suit || (p.gear.boots ? 'boots' : null);
       hbSuit.classList.toggle('hidden', !activeSuit);
       if (activeSuit && GEAR[activeSuit]) {
-        hbSuit.innerHTML = `${gearIcon(activeSuit)}<em>${GEAR[activeSuit].name}</em>`;
+        setHtml(hbSuit, `${gearIcon(activeSuit)}<em>${GEAR[activeSuit].name}</em>`);
       }
     }
     const hbBase = $('#hb-base');
@@ -601,9 +607,8 @@ export class UI {
       const canUp = nxt && p.dust >= nxt.cost;
       hbBase.classList.toggle('tut-pulse', !!canUp);
       hbBase.title = nxt ? `Upgrade Camp to Lv.${nxt.level} ${nxt.name} (${nxt.cost} Banked Dust) [Key U]` : 'Max Camp Level 5';
-      hbBaseLbl.textContent = nxt
-        ? `Lv.${p.camp.level} Camp [U]`
-        : `Lv.5 MAX`;
+      const baseTxt = nxt ? `Lv.${p.camp.level} Camp [U]` : `Lv.5 MAX`;
+      if (hbBaseLbl.textContent !== baseTxt) hbBaseLbl.textContent = baseTxt;
     }
     const hbCraft = $('#hb-craft');
     if (hbCraft) {
@@ -612,17 +617,25 @@ export class UI {
     }
     const hbRelic = document.querySelector('[data-open="treasure"]');
     if (hbRelic) hbRelic.classList.toggle('hidden', inStarterSteps);
+
+    // Throttle recursive recipe checks to every 0.45s instead of 60 times/sec
+    this._craftCheckT = (this._craftCheckT || 0) - dt;
+    if (this._craftCheckT <= 0) {
+      this._craftCheckT = 0.45;
+      this._cachedCanCraft = this.canCraftAny();
+      this._cachedQuickRecipe = g.getQuickCraftRecipe ? g.getQuickCraftRecipe() : null;
+    }
     const craftBadge = $('#craft-badge');
-    if (craftBadge) craftBadge.classList.toggle('hidden', !this.canCraftAny());
+    if (craftBadge) craftBadge.classList.toggle('hidden', !this._cachedCanCraft);
 
     // carrying / unbanked loot risk bar
     const c = $('#carry');
     if (p.raidedFrom) {
-      c.innerHTML = `<b>CAMP RAID ACTIVE:</b> Carrying <b>${p.raidedFrom.ownerName}'s Vault Loot (${ubDust} Dust)</b> — Return to <b>YOUR CAMP</b> to Bank (+100 Bonus)`;
+      setHtml(c, `<b>CAMP RAID ACTIVE:</b> Carrying <b>${p.raidedFrom.ownerName}'s Vault Loot (${ubDust} Dust)</b> — Return to <b>YOUR CAMP</b> to Bank (+100 Bonus)`);
       c.classList.remove('hidden');
       c.classList.add('stolen');
     } else if (ubDust > 0 || ubItems > 0) {
-      c.innerHTML = `<b>UNBANKED LOOT BAG:</b> ${ubDust > 0 ? `<span class="c-hl">${ubDust} Dust</span>` : ''}${ubDust > 0 && ubItems > 0 ? ' · ' : ''}${ubItems > 0 ? `<span class="c-hl">${ubItems} Materials</span>` : ''} — Return to <b>YOUR CAMP</b> to Bank${ubDust >= 50 ? ' <span class="c-bonus">(+15% Bonus)</span>' : ''}`;
+      setHtml(c, `<b>UNBANKED LOOT BAG:</b> ${ubDust > 0 ? `<span class="c-hl">${ubDust} Dust</span>` : ''}${ubDust > 0 && ubItems > 0 ? ' · ' : ''}${ubItems > 0 ? `<span class="c-hl">${ubItems} Materials</span>` : ''} — Return to <b>YOUR CAMP</b> to Bank${ubDust >= 50 ? ' <span class="c-bonus">(+15% Bonus)</span>' : ''}`);
       c.classList.remove('hidden');
       c.classList.toggle('stolen', ubDust >= 80 || ubItems >= 4);
     } else c.classList.add('hidden');
@@ -634,11 +647,14 @@ export class UI {
       qf.id = 'quick-forge';
       qf.className = 'quick-forge hidden';
       qf.onclick = () => {
-        if (this.g.quickCraft()) this.refreshPanels();
+        if (this.g.quickCraft()) {
+          this._craftCheckT = 0;
+          this.refreshPanels();
+        }
       };
       $('#hud').appendChild(qf);
     }
-    const qr = g.getQuickCraftRecipe ? g.getQuickCraftRecipe() : null;
+    const qr = this._cachedQuickRecipe;
     if (qr && !this.panelOpen) {
       const qName = qr.gear ? GEAR[qr.out].name : ITEMS[qr.out].name;
       const qIcon = qr.gear && GEAR[qr.out].weaponImg ? GEAR[qr.out].weaponImg : ICON(qr.gear ? GEAR[qr.out].icon : qr.out);
@@ -690,7 +706,7 @@ export class UI {
         html = `<div class="ptxt"><kbd>Hold E</kbd> Open <b>Ancient Relic Chest</b> (Awakens Camp Trophy Shrine)</div>`;
       }
     }
-    pr.innerHTML = html;
+    setHtml(pr, html);
     pr.classList.toggle('hidden', !html);
 
     // Update mobile touch action button state & label

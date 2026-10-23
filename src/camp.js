@@ -410,15 +410,24 @@ export class Camp {
     vl.position.copy(vp).setY(2.65);
     g.add(vl);
 
-    // Campfire
+    // Campfire (uses zero-cost emissive glow disc instead of PointLight to avoid WebGL NUM_POINT_LIGHTS shader recompiles!)
     const fire = new THREE.Group();
     fire.add(spawn('bonfire_stones', 0.48));
     this.flame = spawn('bonfire', 1.45);
     fire.add(this.flame);
-    const fl = new THREE.PointLight('#ff8a2a', 14, 12, 2);
-    this.fireLight = fl;
-    fl.position.y = 1.2;
-    fire.add(fl);
+    const fireGlowMat = new THREE.MeshBasicMaterial({
+      color: '#ff8a2a',
+      transparent: true,
+      opacity: 0.28,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const fireGlow = new THREE.Mesh(new THREE.CircleGeometry(2.1, 20), fireGlowMat);
+    fireGlow.rotation.x = -Math.PI / 2;
+    fireGlow.position.y = 0.05;
+    fire.add(fireGlow);
+    this.fireGlowMat = fireGlowMat;
     fire.position.copy(side.clone().multiplyScalar(-3.8)).add(back.clone().multiplyScalar(2.0));
     g.add(fire);
     this.fireLocal = fire.position.clone();
@@ -667,7 +676,11 @@ export class Camp {
       dg.lblEl.classList.toggle('hidden', !showD);
       if (dg.lblObj) dg.lblObj.visible = showD;
       if (showD) {
-        dg.lblEl.innerHTML = `<b style="color:#42f54b">🦖 ${dg.name.toUpperCase()}</b>`;
+        const dHtml = `<b style="color:#42f54b">🦖 ${dg.name.toUpperCase()}</b>`;
+        if (dg.lblEl._lastHtml !== dHtml) {
+          dg.lblEl._lastHtml = dHtml;
+          dg.lblEl.innerHTML = dHtml;
+        }
       }
     }
 
@@ -694,9 +707,13 @@ export class Camp {
         tm.lblEl.classList.toggle('hidden', !showT);
         if (tm.lblObj) tm.lblObj.visible = showT;
         if (showT) {
-          tm.lblEl.innerHTML = disabled
+          const tHtml = disabled
             ? `<span class="dim">TURRET DISABLED · ${Math.ceil(tm.disabledUntil - now)}s</span>`
             : `<b style="color:#00f5ff">GUARD TURRET (${tm.hp}/${tm.maxHp} HP)</b><br><small style="color:#ffd615">Bonk to Disable (25s)</small>`;
+          if (tm.lblEl._lastHtml !== tHtml) {
+            tm.lblEl._lastHtml = tHtml;
+            tm.lblEl.innerHTML = tHtml;
+          }
         }
       } else if (tm.lblObj) {
         tm.lblObj.visible = false;
@@ -720,23 +737,27 @@ export class Camp {
     this.slabLabelEl.classList.toggle('hidden', !showSlab);
     if (this.slabLblObj) {
       this.slabLblObj.visible = showSlab;
-      if (!this.isMine) {
+      if (showSlab && !this.isMine) {
         this.slabLblObj.position.copy(this.boulderClosed).setY(2.85);
       }
     }
     const showName = showLabelsFor(this.center, 22);
     if (this.nameEl) this.nameEl.classList.toggle('hidden', !showName);
     if (this.nameLblObj) this.nameLblObj.visible = showName;
-    if (this.isMine) {
-      this.slabLabelEl.textContent = locked
-        ? `GATE LOCKED · ${Math.ceil(this.lockedUntil - now)}s (${this.gateHp} HP)`
-        : 'STEP TO LOCK GATE';
-    } else {
-      this.slabLabelEl.innerHTML = locked
-        ? `<b style="color:#ff6b6b">BOULDER GATE LOCKED (${this.gateHp}/${this.gateMaxHp} HP)</b><br><small style="color:#ffd615">Click / Bonk Gate to Breach!</small>`
-        : `<b style="color:#42f54b">GATE BREACHED · ${Math.ceil(this.gateRegenTimer || 0)}s WINDOW</b>`;
+    if (showSlab) {
+      const sHtml = this.isMine
+        ? locked
+          ? `GATE LOCKED · ${Math.ceil(this.lockedUntil - now)}s (${this.gateHp} HP)`
+          : 'STEP TO LOCK GATE'
+        : locked
+          ? `<b style="color:#ff6b6b">BOULDER GATE LOCKED (${this.gateHp}/${this.gateMaxHp} HP)</b><br><small style="color:#ffd615">Click / Bonk Gate to Breach!</small>`
+          : `<b style="color:#42f54b">GATE BREACHED · ${Math.ceil(this.gateRegenTimer || 0)}s WINDOW</b>`;
+      if (this.slabLabelEl._lastHtml !== sHtml) {
+        this.slabLabelEl._lastHtml = sHtml;
+        this.slabLabelEl.innerHTML = sHtml;
+      }
+      this.slabLabelEl.classList.toggle('locked', locked);
     }
-    this.slabLabelEl.classList.toggle('locked', locked);
 
     if (this.upgradeLabelEl) {
       const showUp = this.isMine && showLabelsFor(this.upgradeWorld, 6.5);
@@ -744,13 +765,19 @@ export class Camp {
       if (this.upLblObj) this.upLblObj.visible = showUp;
       if (showUp) {
         const nxt = this.nextUpgradeCfg;
-        this.upgradeLabelEl.innerHTML = nxt
+        const uHtml = nxt
           ? `<b style="color:#ffd615">UPGRADE CAMP [U]</b><br><small>Lv.${nxt.level} ${nxt.name} · ${nxt.cost} Dust</small>`
           : `<b style="color:#42f54b">MAX CAMP · LV.5</b>`;
+        if (this.upgradeLabelEl._lastHtml !== uHtml) {
+          this.upgradeLabelEl._lastHtml = uHtml;
+          this.upgradeLabelEl.innerHTML = uHtml;
+        }
       }
     }
 
-    this.fireLight.intensity = 12 + Math.sin(t * 13) * 3 + Math.sin(t * 29) * 2;
+    if (this.fireGlowMat) {
+      this.fireGlowMat.opacity = 0.24 + Math.sin(t * 11) * 0.06;
+    }
 
     if (this.vaultEl) {
       const showVault = showLabelsFor(this.vaultWorld, 6.5);
@@ -759,21 +786,28 @@ export class Camp {
       if (showVault) {
         const vaultDust = Math.floor(this.owner ? this.owner.dust : 0);
         const onCd = now < this.raidCooldownUntil;
-        if (this.isMine) {
-          this.vaultEl.innerHTML = `<b style="color:${this.color}">CAMP VAULT · ${fmt(vaultDust)} DUST</b><br><small style="color:#42f54b">Safe Storage</small>`;
-        } else {
-          const subTxt = locked
-            ? `<span style="color:#ff6b6b">BREACH GATE FIRST (${this.gateHp} HP)</span>`
-            : onCd
-              ? `<span class="dim">COOLDOWN ${Math.ceil(this.raidCooldownUntil - now)}s</span>`
-              : `<span style="color:#42f54b">HOLD [E] TO CRACK VAULT (3.2s)</span>`;
-          this.vaultEl.innerHTML = `<b style="color:${this.color}">${this.ownerName.toUpperCase()} VAULT (LV.${this.level} · ${fmt(vaultDust)} DUST)</b><br>${subTxt}`;
+        const vHtml = this.isMine
+          ? `<b style="color:${this.color}">CAMP VAULT · ${fmt(vaultDust)} DUST</b><br><small style="color:#42f54b">Safe Storage</small>`
+          : `<b style="color:${this.color}">${this.ownerName.toUpperCase()} VAULT (LV.${this.level} · ${fmt(vaultDust)} DUST)</b><br>${
+              locked
+                ? `<span style="color:#ff6b6b">BREACH GATE FIRST (${this.gateHp} HP)</span>`
+                : onCd
+                  ? `<span class="dim">COOLDOWN ${Math.ceil(this.raidCooldownUntil - now)}s</span>`
+                  : `<span style="color:#42f54b">HOLD [E] TO CRACK VAULT (3.2s)</span>`
+            }`;
+        if (this.vaultEl._lastHtml !== vHtml) {
+          this.vaultEl._lastHtml = vHtml;
+          this.vaultEl.innerHTML = vHtml;
         }
       }
     }
 
     for (const n of this.nests) {
-      if (!n.active) { n.el.classList.add('hidden'); continue; }
+      if (!n.active) {
+        n.el.classList.add('hidden');
+        if (n.lbl) n.lbl.visible = false;
+        continue;
+      }
       const c = n.content;
       const shrine = n.shrine || TROPHY_SHRINES[n.i] || TROPHY_SHRINES[0];
       if (c && n.mesh) {
@@ -781,13 +815,14 @@ export class Camp {
       }
       const show = showLabelsFor(n.world, 3.8);
       n.el.classList.toggle('hidden', !show);
+      if (n.lbl) n.lbl.visible = show;
       if (show) {
-        if (!c) {
-          const bossCfg = BOSSES.find((b) => b.id === shrine.bossId);
-          const coinName = ITEMS[shrine.coin]?.name || 'Biome Coin';
-          n.el.innerHTML = `<span class="dim"><b>${shrine.name}</b><br><small>Slay ${bossCfg ? bossCfg.name : 'Boss'} or 3x ${coinName}</small></span>`;
-        } else {
-          n.el.innerHTML = `<b style="color:${shrine.color}">${shrine.name}</b><br><span class="rate" style="color:#42f54b">${shrine.buffText}</span>`;
+        const nHtml = !c
+          ? `<span class="dim"><b>${shrine.name}</b><br><small>Slay ${(BOSSES.find((b) => b.id === shrine.bossId) || {}).name || 'Boss'} or 3x ${ITEMS[shrine.coin]?.name || 'Biome Coin'}</small></span>`
+          : `<b style="color:${shrine.color}">${shrine.name}</b><br><span class="rate" style="color:#42f54b">${shrine.buffText}</span>`;
+        if (n.el._lastHtml !== nHtml) {
+          n.el._lastHtml = nHtml;
+          n.el.innerHTML = nHtml;
         }
       }
     }

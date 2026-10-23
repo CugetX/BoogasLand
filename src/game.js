@@ -89,8 +89,10 @@ function makeRaidPursuitArrow() {
   el.innerHTML = `<span>🚨 FOLLOW RAIDER</span>`;
   const lbl = new CSS2DObject(el);
   lbl.position.set(0, 0.9, 0.2);
+  lbl.visible = false;
   g.add(lbl);
   g.userData.lblEl = el;
+  g.userData.lblObj = lbl;
   g.visible = false;
   return g;
 }
@@ -211,6 +213,33 @@ export class Game {
     this.raidRing = makeRaidPursuitRing();
     this.activeCampRaider = null;
     this.scene.add(this.guideArrow, this.guideRing, this.raidArrow, this.raidRing);
+
+    // Pre-compile 100% of WebGL shaders & shadow-map depth programs up-front during loading so gameplay never stalls!
+    this.prewarmSceneShaders();
+  }
+
+  prewarmSceneShaders() {
+    try {
+      const saved = [];
+      this.scene.traverse((o) => {
+        if (o.isCSS2DObject) return;
+        saved.push({ o, vis: o.visible, fc: o.frustumCulled });
+        o.visible = true;
+        o.frustumCulled = false;
+      });
+      this.camera.position.set(0, 60, 120);
+      this.camera.lookAt(0, 0, 0);
+      this.camera.updateMatrixWorld(true);
+      this.renderer.compile(this.scene, this.camera);
+      this.renderer.render(this.scene, this.camera);
+      for (let i = 0; i < saved.length; i++) {
+        const s = saved[i];
+        s.o.visible = s.vis;
+        s.o.frustumCulled = s.fc;
+      }
+    } catch (e) {
+      /* ignore */
+    }
   }
 
   spawnSocialHubProps() {
@@ -584,8 +613,9 @@ export class Game {
 
   spawnChests() {
     for (const tr of TREASURES) {
-      const ch = { tr, alive: false, respawn: 2 + rand() * 6, mesh: null, pos: new THREE.Vector3() };
+      const ch = { tr, alive: false, respawn: 0, mesh: null, pos: new THREE.Vector3() };
       this.chests.push(ch);
+      this.placeChest(ch);
     }
   }
   placeChest(ch) {
@@ -1856,10 +1886,11 @@ export class Game {
   }
 
   puff(pos, color) {
+    if (!this._puffGeo) this._puffGeo = new THREE.OctahedronGeometry(0.18, 0);
     const g = new THREE.Group();
-    const m = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.8, transparent: true, flatShading: true });
-    for (let i = 0; i < 14; i++) {
-      const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.18, 0), m);
+    const m = new THREE.MeshBasicMaterial({ color, transparent: true });
+    for (let i = 0; i < 10; i++) {
+      const s = new THREE.Mesh(this._puffGeo, m);
       s.userData.v = new THREE.Vector3((rand() - 0.5) * 5, 3 + rand() * 4, (rand() - 0.5) * 5);
       g.add(s);
     }
@@ -2008,6 +2039,7 @@ export class Game {
       const rnx = rDist > 0.01 ? rdx / rDist : 0;
       const rnz = rDist > 0.01 ? rdz / rDist : 1;
       this.raidArrow.visible = true;
+      if (this.raidArrow.userData.lblObj) this.raidArrow.userData.lblObj.visible = true;
       this.raidArrow.position.set(
         p.pos.x + rnx * 2.1,
         p.pos.y + 2.15 + Math.sin(t * 9) * 0.16,
@@ -2033,6 +2065,7 @@ export class Game {
       return;
     } else if (this.raidArrow && this.raidRing) {
       this.raidArrow.visible = false;
+      if (this.raidArrow.userData.lblObj) this.raidArrow.userData.lblObj.visible = false;
       this.raidRing.visible = false;
     }
 
@@ -2701,7 +2734,7 @@ export class Game {
     this.ui.update(dt);
     if (this.mode === 'valley') {
       this.saveT += dt;
-      if (this.saveT > 8) { this.saveT = 0; this.save(); }
+      if (this.saveT > 20) { this.saveT = 0; this.save(); }
     }
   }
 

@@ -5,52 +5,69 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 /**
- * Creative Trio Stylized Gradient Shader Hook:
- * Gives 3D models Creative Trio's signature hand-painted look:
- * - Warm plum/earth grounding shadow at the base (y = minY)
- * - Rich saturated midtones in the body
- * - Sunlit golden-warm crown highlight at the top (y = maxY)
- * - Soft hemisphere sky/ground wrap so shadows are never harsh black
+ * Creative Trio Stylized Vertex Color Gradient Baker (Zero Shader-Compile Stalls!):
+ * Bakes Creative Trio's signature vertical color gradient (warm earth base -> rich midtones -> sunlit crown)
+ * directly into geometry vertex colors at asset load time so all models share standard pre-compiled WebGL shaders!
  */
-export function stylizeMaterial(mat, minY = 0, maxY = 5.0, strength = 0.62) {
+export function bakeStylizedVertexGradient(geo, minY = 0, maxY = 5.0, strength = 0.48) {
+  if (!geo || !geo.attributes?.position || geo.userData?.ctBaked) return geo;
+  geo.userData = geo.userData || {};
+  geo.userData.ctBaked = true;
+  const pos = geo.attributes.position;
+  const norm = geo.attributes.normal;
+  const existing = geo.attributes.color;
+  const count = pos.count;
+  const out = new Float32Array(count * 3);
+  const span = Math.max(0.4, maxY - minY);
+
+  for (let i = 0; i < count; i++) {
+    const y = pos.getY(i);
+    const hk = Math.max(0, Math.min(1, (y - minY) / span));
+    // Vertical gradient: warm grounded shadow -> rich midtone -> sunlit crown highlight
+    let gr, gg, gb;
+    if (hk < 0.5) {
+      const t = hk * 2.0;
+      gr = 0.74 + (1.02 - 0.74) * t;
+      gg = 0.64 + (0.99 - 0.64) * t;
+      gb = 0.70 + (0.96 - 0.70) * t;
+    } else {
+      const t = (hk - 0.5) * 2.0;
+      gr = 1.02 + (1.16 - 1.02) * t;
+      gg = 0.99 + (1.12 - 0.99) * t;
+      gb = 0.96 + (1.01 - 0.96) * t;
+    }
+    const ny = norm ? norm.getY(i) : 0.5;
+    const hemi = Math.max(0, Math.min(1, ny * 0.5 + 0.5));
+    const wr = 0.92 + (1.06 - 0.92) * hemi;
+    const wg = 0.86 + (1.04 - 0.86) * hemi;
+    const wb = 0.90 + (1.00 - 0.90) * hemi;
+
+    const mr = 1.0 + (gr * wr - 1.0) * strength;
+    const mg = 1.0 + (gg * wg - 1.0) * strength;
+    const mb = 1.0 + (gb * wb - 1.0) * strength;
+
+    const er = existing ? existing.getX(i) : 1.0;
+    const eg = existing ? existing.getY(i) : 1.0;
+    const eb = existing ? existing.getZ(i) : 1.0;
+
+    out[i * 3] = er * mr;
+    out[i * 3 + 1] = eg * mg;
+    out[i * 3 + 2] = eb * mb;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(out, 3));
+  return geo;
+}
+
+export function stylizeMaterial(mat) {
   if (!mat || mat.userData?.ctStylized) return mat;
   mat.userData = mat.userData || {};
   mat.userData.ctStylized = true;
   mat.roughness = Math.min(mat.roughness ?? 0.7, 0.72);
   mat.metalness = Math.min(mat.metalness ?? 0.0, 0.08);
-  const span = Math.max(0.4, maxY - minY);
-  const prevCompile = mat.onBeforeCompile;
-  mat.onBeforeCompile = (sh, renderer) => {
-    if (prevCompile) prevCompile(sh, renderer);
-    sh.vertexShader =
-      `varying float vCtHeight;\nvarying vec3 vCtWorldN;\n` +
-      sh.vertexShader.replace(
-        '#include <begin_vertex>',
-        `#include <begin_vertex>
-        vCtHeight = clamp((position.y - (${minY.toFixed(3)})) / ${span.toFixed(3)}, 0.0, 1.0);
-        vCtWorldN = normalize(normalMatrix * objectNormal);`
-      );
-    sh.fragmentShader =
-      `varying float vCtHeight;\nvarying vec3 vCtWorldN;\n` +
-      sh.fragmentShader.replace(
-        '#include <color_fragment>',
-        `#include <color_fragment>
-        vec3 ctBot = vec3(0.72, 0.60, 0.68);
-        vec3 ctMid = vec3(1.02, 0.99, 0.96);
-        vec3 ctTop = vec3(1.18, 1.13, 1.01);
-        vec3 ctGrad = vCtHeight < 0.5
-          ? mix(ctBot, ctMid, vCtHeight * 2.0)
-          : mix(ctMid, ctTop, (vCtHeight - 0.5) * 2.0);
-        float ctHemi = clamp(vCtWorldN.y * 0.5 + 0.5, 0.0, 1.0);
-        vec3 ctWrap = mix(vec3(0.90, 0.82, 0.88), vec3(1.08, 1.05, 1.00), ctHemi);
-        diffuseColor.rgb *= mix(vec3(1.0), ctGrad * ctWrap, ${strength.toFixed(3)});`
-      );
-  };
-  mat.customProgramCacheKey = () => `ctStyle_${minY.toFixed(1)}_${span.toFixed(1)}_${strength.toFixed(2)}`;
   return mat;
 }
 
-function extractNormalizedFbxMesh(fbxGroup, childName, material, stylizeStrength = 0.28) {
+function extractNormalizedFbxMesh(fbxGroup, childName, material, stylizeStrength = 0.34) {
   if (!fbxGroup) return null;
   const ch =
     fbxGroup.children.find((c) => c.name === childName) ||
@@ -71,10 +88,9 @@ function extractNormalizedFbxMesh(fbxGroup, childName, material, stylizeStrength
   geo.computeBoundingSphere();
 
   const h = Math.max(0.5, geo.boundingBox.max.y - geo.boundingBox.min.y);
-  const m = material.clone();
-  stylizeMaterial(m, 0, h, stylizeStrength);
+  bakeStylizedVertexGradient(geo, 0, h, stylizeStrength);
 
-  const mesh = new THREE.Mesh(geo, m);
+  const mesh = new THREE.Mesh(geo, material);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   const grp = new THREE.Group();
@@ -125,10 +141,14 @@ export async function loadAssets(onProgress) {
       try {
         const g = await loader.loadAsync(`/models/cc0/${n}.glb`);
         const box = new THREE.Box3().setFromObject(g.scene);
+        const isDino = n.startsWith('dino_');
         g.scene.traverse((o) => {
           if (o.isMesh) {
             if (o.geometry && !o.geometry.attributes.normal) {
               o.geometry.computeVertexNormals();
+            }
+            if (o.geometry && !isDino) {
+              bakeStylizedVertexGradient(o.geometry, box.min.y, box.max.y, 0.52);
             }
             o.castShadow = true;
             o.receiveShadow = true;
@@ -137,6 +157,7 @@ export async function loadAssets(onProgress) {
               if (!m) return;
               if (m.map) m.map.anisotropy = 4;
               if (m.alphaTest > 0) m.side = THREE.DoubleSide;
+              if (!isDino) m.vertexColors = true;
               if (/metal|gold|steel|iron/i.test(m.name)) {
                 m.metalness = 0.22;
                 m.roughness = 0.45;
@@ -144,7 +165,7 @@ export async function loadAssets(onProgress) {
                 m.metalness = 0;
                 m.roughness = 0.68;
               }
-              stylizeMaterial(m, box.min.y, box.max.y, 0.65);
+              stylizeMaterial(m);
             });
           }
         });
@@ -235,17 +256,19 @@ export async function loadAssets(onProgress) {
     const baseCtMat = new THREE.MeshStandardMaterial({
       map: ctPalette,
       color: '#ffffff',
+      vertexColors: true,
       roughness: 0.68,
       metalness: 0.0,
     });
     const baseRockMat = new THREE.MeshStandardMaterial({
       map: ctRocksPalette,
       color: '#ffffff',
+      vertexColors: true,
       roughness: 0.74,
       metalness: 0.0,
     });
 
-    const assignCt = (targetName, group, childName, mat = baseCtMat, strength = 0.24) => {
+    const assignCt = (targetName, group, childName, mat = baseCtMat, strength = 0.28) => {
       const extracted = extractNormalizedFbxMesh(group, childName, mat, strength);
       if (extracted) {
         models[targetName] = extracted;
@@ -255,8 +278,8 @@ export async function loadAssets(onProgress) {
 
     // 1. Register all 23 stylized trees from Creative Trio Trees Pack 01
     trees01.children.forEach((ch, idx) => {
-      assignCt(`ct_tree_${idx}`, trees01, ch.name, baseCtMat, 0.24);
-      assignCt(`ct_${ch.name}`, trees01, ch.name, baseCtMat, 0.24);
+      assignCt(`ct_tree_${idx}`, trees01, ch.name, baseCtMat, 0.28);
+      assignCt(`ct_${ch.name}`, trees01, ch.name, baseCtMat, 0.28);
     });
 
     // Lush Green Broadleaf & Round Canopy Trees (Meadow, Booga Town, Jungle, Coast, Prairie, Ancient Runes)
@@ -290,34 +313,34 @@ export async function loadAssets(onProgress) {
     assignCt('ct_ice_tree_2', trees01, 'Tree015', baseCtMat);
 
     // 2. Stylized Low-Poly Rocks & Canyon Formations (Rocks_01.fbx)
-    assignCt('rock_m1', rocks01, 'Rock_Formation001', baseRockMat, 0.30);
-    assignCt('rock_m2', rocks01, 'Rock_Formation002', baseRockMat, 0.30);
-    assignCt('rock_m3', rocks01, 'Rock_Formation005', baseRockMat, 0.30);
-    assignCt('rock_b1', rocks01, 'Rock001', baseRockMat, 0.30);
-    assignCt('rock_b2', rocks01, 'Rock002', baseRockMat, 0.30);
-    assignCt('rock_b3', rocks01, 'Rock004', baseRockMat, 0.30);
-    assignCt('rock_b4', rocks01, 'Rock009', baseRockMat, 0.30);
-    assignCt('rock_b5', rocks01, 'Rock011', baseRockMat, 0.30);
-    assignCt('rock_moss', rocks01, 'Rock_Formation010', baseRockMat, 0.30);
-    assignCt('rock_canyon_1', rocks01, 'Rock_Formation003', baseRockMat, 0.30);
-    assignCt('rock_canyon_2', rocks01, 'Rock_Formation013', baseRockMat, 0.30);
-    assignCt('rock_snow', rocks01, 'Rock_Formation016', baseRockMat, 0.30);
+    assignCt('rock_m1', rocks01, 'Rock_Formation001', baseRockMat, 0.34);
+    assignCt('rock_m2', rocks01, 'Rock_Formation002', baseRockMat, 0.34);
+    assignCt('rock_m3', rocks01, 'Rock_Formation005', baseRockMat, 0.34);
+    assignCt('rock_b1', rocks01, 'Rock001', baseRockMat, 0.34);
+    assignCt('rock_b2', rocks01, 'Rock002', baseRockMat, 0.34);
+    assignCt('rock_b3', rocks01, 'Rock004', baseRockMat, 0.34);
+    assignCt('rock_b4', rocks01, 'Rock009', baseRockMat, 0.34);
+    assignCt('rock_b5', rocks01, 'Rock011', baseRockMat, 0.34);
+    assignCt('rock_moss', rocks01, 'Rock_Formation010', baseRockMat, 0.34);
+    assignCt('rock_canyon_1', rocks01, 'Rock_Formation003', baseRockMat, 0.34);
+    assignCt('rock_canyon_2', rocks01, 'Rock_Formation013', baseRockMat, 0.34);
+    assignCt('rock_snow', rocks01, 'Rock_Formation016', baseRockMat, 0.34);
 
-    // 3. Stylized Low-Poly Bushes, Ferns, Flowers & Gradient Mushrooms
-    assignCt('fern', plants01, 'Plane027', baseCtMat, 0.24);
-    assignCt('bush_1', plants01, 'Plane001', baseCtMat, 0.24);
-    assignCt('bush_moss', plants01, 'Plane029', baseCtMat, 0.24);
-    assignCt('bush_flowers', plants01, 'Plane015', baseCtMat, 0.24);
-    assignCt('flowers_1', flowers01, 'Flower031', baseCtMat, 0.24);
-    assignCt('flowers_2', flowers01, 'Flower025', baseCtMat, 0.24);
-    assignCt('mushroom_s', mushrooms01, 'Mushroom003', baseCtMat, 0.24);
-    assignCt('mushroom_l', mushrooms01, 'Mushroom012', baseCtMat, 0.24);
-    assignCt('mushroom_red', mushrooms01, 'Mushroom021', baseCtMat, 0.24);
-    assignCt('mushroom_king', mushrooms01, 'Mushroom002', baseCtMat, 0.24);
+    // 3. Stylized Low-Poly Bushes, Ferns, Flowers & Gradient Mushrooms (using lightweight low-poly meshes!)
+    assignCt('fern', plants01, 'Plane020', baseCtMat, 0.28);
+    assignCt('bush_1', plants01, 'Plane001', baseCtMat, 0.28);
+    assignCt('bush_moss', plants01, 'Plane019', baseCtMat, 0.28);
+    assignCt('bush_flowers', plants01, 'Plane012', baseCtMat, 0.28);
+    assignCt('flowers_1', flowers01, 'Flower011', baseCtMat, 0.28);
+    assignCt('flowers_2', flowers01, 'Flower002', baseCtMat, 0.28);
+    assignCt('mushroom_s', mushrooms01, 'Mushroom003', baseCtMat, 0.28);
+    assignCt('mushroom_l', mushrooms01, 'Mushroom012', baseCtMat, 0.28);
+    assignCt('mushroom_red', mushrooms01, 'Mushroom021', baseCtMat, 0.28);
+    assignCt('mushroom_king', mushrooms01, 'Mushroom002', baseCtMat, 0.28);
 
     // 4. Stylized Wooden Fences
-    assignCt('fence_rustic_1', fences01, 'Fence0501', baseCtMat, 0.26);
-    assignCt('fence_rustic_2', fences01, 'Fence0701', baseCtMat, 0.26);
+    assignCt('fence_rustic_1', fences01, 'Fence0501', baseCtMat, 0.28);
+    assignCt('fence_rustic_2', fences01, 'Fence0701', baseCtMat, 0.28);
   }
 }
 
@@ -372,7 +395,7 @@ export function tint(obj, color, opts = {}, matRegex = null) {
       if (color) c.color.set(color);
       Object.assign(c, opts);
       if (opts.emissive) c.emissive = new THREE.Color(opts.emissive);
-      stylizeMaterial(c, 0, 5.0, 0.55);
+      stylizeMaterial(c);
       return c;
     });
     o.material = Array.isArray(o.material) ? out : out[0];
@@ -426,7 +449,7 @@ export function scatterInstanced(parent, name, items, height, { chunk = 40, shad
   src.traverse((o) => {
     if (!o.isMesh) return;
     const local = o.matrixWorld.clone();
-    parts.push({ geo: o.geometry, mat: wind ? windMaterial(o.material, wind, size.y) : o.material, local });
+    parts.push({ geo: o.geometry, mat: o.material, local });
   });
   const norm = new THREE.Matrix4().makeTranslation(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2);
   // bucket by chunk
@@ -450,6 +473,7 @@ export function scatterInstanced(parent, name, items, height, { chunk = 40, shad
         im.setMatrixAt(i, m);
       });
       im.castShadow = shadows;
+      im.userData.canShadow = shadows;
       im.receiveShadow = receive;
       im.computeBoundingSphere();
       parent.add(im);
@@ -460,50 +484,6 @@ export function scatterInstanced(parent, name, items, height, { chunk = 40, shad
 }
 
 export const windUniforms = { uTime: { value: 0 } };
-const windCache = new Map();
-function windMaterial(mat, strength, height) {
-  const key = mat.uuid + strength;
-  if (windCache.has(key)) return windCache.get(key);
-  const m = mat.clone();
-  m.onBeforeCompile = (sh) => {
-    sh.uniforms.uTime = windUniforms.uTime;
-    sh.vertexShader =
-      'uniform float uTime;\nvarying float vCtHeight;\nvarying vec3 vCtWorldN;\n' +
-      sh.vertexShader.replace(
-        '#include <begin_vertex>',
-        `#include <begin_vertex>
-        #ifdef USE_INSTANCING
-          vec3 ip = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
-        #else
-          vec3 ip = vec3(0.0);
-        #endif
-        float hk = clamp(position.y / ${height.toFixed(3)}, 0.0, 1.0);
-        vCtHeight = hk;
-        vCtWorldN = normalize(normalMatrix * objectNormal);
-        float w = sin(uTime * 1.7 + ip.x * 0.35 + ip.z * 0.27) * 0.6 + sin(uTime * 3.1 + ip.x * 0.9) * 0.25;
-        transformed.x += w * hk * hk * ${strength.toFixed(3)};
-        transformed.z += cos(uTime * 1.3 + ip.z * 0.4) * hk * hk * ${(strength * 0.5).toFixed(3)};`
-      );
-    sh.fragmentShader =
-      `varying float vCtHeight;\nvarying vec3 vCtWorldN;\n` +
-      sh.fragmentShader.replace(
-        '#include <color_fragment>',
-        `#include <color_fragment>
-        vec3 ctBot = vec3(0.72, 0.60, 0.68);
-        vec3 ctMid = vec3(1.02, 0.99, 0.96);
-        vec3 ctTop = vec3(1.18, 1.13, 1.01);
-        vec3 ctGrad = vCtHeight < 0.5
-          ? mix(ctBot, ctMid, vCtHeight * 2.0)
-          : mix(ctMid, ctTop, (vCtHeight - 0.5) * 2.0);
-        float ctHemi = clamp(vCtWorldN.y * 0.5 + 0.5, 0.0, 1.0);
-        vec3 ctWrap = mix(vec3(0.90, 0.82, 0.88), vec3(1.08, 1.05, 1.00), ctHemi);
-        diffuseColor.rgb *= mix(vec3(1.0), ctGrad * ctWrap, 0.35);`
-      );
-  };
-  m.customProgramCacheKey = () => 'wind_ct_' + strength + height.toFixed(2);
-  windCache.set(key, m);
-  return m;
-}
 
 /** find a texture inside a loaded model by image name fragment */
 export function findTexture(modelName, frag, slot = 'map') {

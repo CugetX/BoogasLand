@@ -462,10 +462,6 @@ function volcano(scene, colliders) {
     volGroup.add(pool);
   }
 
-  const light = new THREE.PointLight('#ff6a1a', 180, 95, 1.5);
-  light.position.set(vp.x, baseY + H + 3.5, vp.z);
-  scene.add(light);
-
   const smoke = [];
   for (let i = 0; i < 14; i++) {
     const smMat = new THREE.MeshStandardMaterial({
@@ -488,7 +484,14 @@ function volcano(scene, colliders) {
   colliders.push({ x: vp.x, z: vp.z, r: VOLCANO_R + 2.0 });
 
   return {
-    update(dt, t) {
+    update(dt, t, focus) {
+      if (focus) {
+        const dVol = Math.hypot(focus.x - vp.x, focus.z - vp.z);
+        const nearVol = dVol < 340;
+        volGroup.visible = nearVol;
+        for (const p of smoke) p.visible = nearVol;
+        if (!nearVol) return;
+      }
       for (const p of smoke) {
         p.userData.t = (p.userData.t + dt * 0.045) % 1;
         const k = p.userData.t;
@@ -794,9 +797,13 @@ function sampleContinentPoints(count, filterFn) {
 
 function decor(scene, colliders) {
   const grassMeshes = [];
+  const addInstanced = (...args) => {
+    grassMeshes.push(...scatterInstanced(...args));
+  };
+
   if (isTutorialMap) {
     const meadow = () => true;
-    grassMeshes.push(...scatterInstanced(scene, 'grass_1', sampleContinentPoints(450, meadow), 0.45, { shadows: false, wind: 0.12, chunk: 30 }));
+    addInstanced(scene, 'grass_1', sampleContinentPoints(450, meadow), 0.45, { shadows: false, chunk: 30 });
     return grassMeshes;
   }
 
@@ -804,79 +811,79 @@ function decor(scene, colliders) {
 
   const inZones = (ids) => (x, z, zn) => ids.includes(zn.id);
 
-  // 1. Lush Ground Foliage across Green Biomes
-  grassMeshes.push(...scatterInstanced(scene, 'grass_1', sampleContinentPoints(5500, inZones(['booga_town', 'jungle', 'prairie', 'ancient_runes', 'coast'])), 0.58, { shadows: false, wind: 0.12, chunk: 120 }));
-  grassMeshes.push(...scatterInstanced(scene, 'fern', sampleContinentPoints(1100, inZones(['jungle', 'ancient_runes', 'haunted_woods'])), 1.15, { shadows: false, wind: 0.12, chunk: 120 }));
-  grassMeshes.push(...scatterInstanced(scene, 'flowers_1', sampleContinentPoints(750, inZones(['booga_town', 'prairie', 'coast'])), 0.65, { shadows: false, wind: 0.1, chunk: 120 }));
-  grassMeshes.push(...scatterInstanced(scene, 'bush_flowers', sampleContinentPoints(320, inZones(['booga_town', 'prairie', 'jungle'])), 1.35, { shadows: false, wind: 0.08, chunk: 140 }));
+  // 1. Lush Ground Foliage across Green Biomes (Lightweight low-poly meshes, shadowless, distance-culled)
+  addInstanced(scene, 'grass_1', sampleContinentPoints(2200, inZones(['booga_town', 'jungle', 'prairie', 'ancient_runes', 'coast'])), 0.58, { shadows: false, chunk: 95 });
+  addInstanced(scene, 'fern', sampleContinentPoints(480, inZones(['jungle', 'ancient_runes', 'haunted_woods'])), 1.15, { shadows: false, chunk: 95 });
+  addInstanced(scene, 'flowers_1', sampleContinentPoints(380, inZones(['booga_town', 'prairie', 'coast'])), 0.65, { shadows: false, chunk: 95 });
+  addInstanced(scene, 'bush_flowers', sampleContinentPoints(240, inZones(['booga_town', 'prairie', 'jungle'])), 1.35, { shadows: false, chunk: 95 });
 
   // 2. Booga Town Valley, Sunny Coast & Meadow Stylized Tree Groves (Creative Trio Pack 01)
   const meadowTrees = sampleContinentPoints(240, inZones(['booga_town', 'coast', 'prairie']));
   meadowTrees.forEach((p) => colliders.push({ x: p.x, z: p.z, r: 0.7 }));
-  scatterInstanced(scene, 'tree_1', meadowTrees.slice(0, 50), 9.2, { wind: 0.08, chunk: 140 });
-  scatterInstanced(scene, 'tree_2', meadowTrees.slice(50, 100), 8.8, { wind: 0.08, chunk: 140 });
-  scatterInstanced(scene, 'tree_3', meadowTrees.slice(100, 150), 9.0, { wind: 0.08, chunk: 140 });
-  scatterInstanced(scene, 'tree_spiral_1', meadowTrees.slice(150, 195), 8.5, { wind: 0.08, chunk: 140 });
-  scatterInstanced(scene, 'pine_1', meadowTrees.slice(195), 9.4, { wind: 0.06, chunk: 140 });
+  addInstanced(scene, 'tree_1', meadowTrees.slice(0, 50), 9.2, { chunk: 95 });
+  addInstanced(scene, 'tree_2', meadowTrees.slice(50, 100), 8.8, { chunk: 95 });
+  addInstanced(scene, 'tree_3', meadowTrees.slice(100, 150), 9.0, { chunk: 95 });
+  addInstanced(scene, 'tree_spiral_1', meadowTrees.slice(150, 195), 8.5, { chunk: 95 });
+  addInstanced(scene, 'pine_1', meadowTrees.slice(195), 9.4, { chunk: 95 });
 
   const palms = sampleContinentPoints(140, inZones(['coast', 'savannah']));
   palms.forEach((p) => colliders.push({ x: p.x, z: p.z, r: 0.6 }));
-  scatterInstanced(scene, 'palm_1', palms, 9.5, { chunk: 140 });
+  addInstanced(scene, 'palm_1', palms, 9.5, { chunk: 95 });
 
   // 3. Deep Jungle Rainforest Canopy, Baobabs & Stylized Giant Mushrooms
   const jTrees = sampleContinentPoints(320, inZones(['jungle', 'ancient_runes', 'prairie']));
   jTrees.forEach((p) => colliders.push({ x: p.x, z: p.z, r: 0.75 }));
-  scatterInstanced(scene, 'tree_1', jTrees.slice(0, 70), 10.5, { wind: 0.08, chunk: 140 });
-  scatterInstanced(scene, 'tree_4', jTrees.slice(70, 140), 11.4, { wind: 0.06, chunk: 140 });
-  scatterInstanced(scene, 'tree_5', jTrees.slice(140, 210), 10.2, { wind: 0.07, chunk: 140 });
-  scatterInstanced(scene, 'tree_blob_1', jTrees.slice(210, 270), 9.6, { wind: 0.08, chunk: 140 });
-  scatterInstanced(scene, 'pine_3', jTrees.slice(270), 9.8, { wind: 0.06, chunk: 140 });
-  scatterInstanced(scene, 'mushroom_king', sampleContinentPoints(95, inZones(['jungle', 'haunted_woods', 'booga_town'])), 2.4, { chunk: 140 });
-  scatterInstanced(scene, 'rock_moss', sampleContinentPoints(130, inZones(['jungle', 'ancient_runes', 'booga_town'])), 2.3, { chunk: 140 });
+  addInstanced(scene, 'tree_1', jTrees.slice(0, 70), 10.5, { chunk: 95 });
+  addInstanced(scene, 'tree_4', jTrees.slice(70, 140), 11.4, { chunk: 95 });
+  addInstanced(scene, 'tree_5', jTrees.slice(140, 210), 10.2, { chunk: 95 });
+  addInstanced(scene, 'tree_blob_1', jTrees.slice(210, 270), 9.6, { chunk: 95 });
+  addInstanced(scene, 'pine_3', jTrees.slice(270), 9.8, { chunk: 95 });
+  addInstanced(scene, 'mushroom_king', sampleContinentPoints(95, inZones(['jungle', 'haunted_woods', 'booga_town'])), 2.4, { shadows: false, chunk: 95 });
+  addInstanced(scene, 'rock_moss', sampleContinentPoints(130, inZones(['jungle', 'ancient_runes', 'booga_town'])), 2.3, { shadows: false, chunk: 95 });
 
   // 4. Haunted Woods & X Jail Island Purple Fantasy Trees & Stylized Pines
   const hTrees = sampleContinentPoints(240, inZones(['haunted_woods', 'x_jail']));
   hTrees.forEach((p) => colliders.push({ x: p.x, z: p.z, r: 0.65 }));
-  scatterInstanced(scene, 'tree_twisted_1', hTrees.slice(0, 85), 9.2, { wind: 0.07, chunk: 140 });
-  scatterInstanced(scene, 'tree_twisted_2', hTrees.slice(85, 165), 9.8, { wind: 0.07, chunk: 140 });
-  scatterInstanced(scene, 'tree_spikes_1', hTrees.slice(165), 9.5, { wind: 0.06, chunk: 140 });
-  scatterInstanced(scene, 'skull_horned', sampleContinentPoints(65, inZones(['haunted_woods', 'x_jail', 'desert'])), 1.45, { chunk: 140 });
-  scatterInstanced(scene, 'mushroom_red', sampleContinentPoints(110, inZones(['haunted_woods'])), 1.6, { shadows: false, chunk: 140 });
+  addInstanced(scene, 'tree_twisted_1', hTrees.slice(0, 85), 9.2, { chunk: 95 });
+  addInstanced(scene, 'tree_twisted_2', hTrees.slice(85, 165), 9.8, { chunk: 95 });
+  addInstanced(scene, 'tree_spikes_1', hTrees.slice(165), 9.5, { chunk: 95 });
+  addInstanced(scene, 'skull_horned', sampleContinentPoints(65, inZones(['haunted_woods', 'x_jail', 'desert'])), 1.45, { shadows: false, chunk: 95 });
+  addInstanced(scene, 'mushroom_red', sampleContinentPoints(110, inZones(['haunted_woods'])), 1.6, { shadows: false, chunk: 95 });
 
   // 5. Golden Savannah Autumn/Amber Groves & Sunstone Desert Cacti
   const acacias = sampleContinentPoints(200, inZones(['savannah', 'ancient_runes']));
   acacias.forEach((p) => colliders.push({ x: p.x, z: p.z, r: 0.65 }));
-  scatterInstanced(scene, 'tree_acacia', acacias.slice(0, 90), 9.4, { wind: 0.07, chunk: 140 });
-  scatterInstanced(scene, 'tree_lava_2', acacias.slice(90, 150), 9.0, { wind: 0.07, chunk: 140 });
-  scatterInstanced(scene, 'tree_lava_3', acacias.slice(150), 8.8, { wind: 0.07, chunk: 140 });
+  addInstanced(scene, 'tree_acacia', acacias.slice(0, 90), 9.4, { chunk: 95 });
+  addInstanced(scene, 'tree_lava_2', acacias.slice(90, 150), 9.0, { chunk: 95 });
+  addInstanced(scene, 'tree_lava_3', acacias.slice(150), 8.8, { chunk: 95 });
 
   const cacti = sampleContinentPoints(220, inZones(['desert', 'savannah']));
   cacti.forEach((p) => colliders.push({ x: p.x, z: p.z, r: 0.5 }));
-  scatterInstanced(scene, 'cactus_1', cacti.slice(0, 120), 3.4, { chunk: 140 });
-  scatterInstanced(scene, 'cactus_2', cacti.slice(120), 2.8, { chunk: 140 });
+  addInstanced(scene, 'cactus_1', cacti.slice(0, 120), 3.4, { shadows: false, chunk: 95 });
+  addInstanced(scene, 'cactus_2', cacti.slice(120), 2.8, { shadows: false, chunk: 95 });
 
   // 6. Prairie, Ancient Runes & Mountain Range Stylized Rock Formations + Fiery Trees
   const crags = sampleContinentPoints(210, inZones(['prairie', 'mountain_range', 'ancient_runes', 'x_jail', 'booga_town']));
   crags.forEach((p) => colliders.push({ x: p.x, z: p.z, r: 1.35 }));
-  scatterInstanced(scene, 'rock_m1', crags.slice(0, 75), 3.6, { chunk: 140 });
-  scatterInstanced(scene, 'rock_m2', crags.slice(75, 145), 3.2, { chunk: 140 });
-  scatterInstanced(scene, 'magic_rock', crags.slice(145), 3.8, { chunk: 140 });
-  scatterInstanced(scene, 'tree_lava_1', sampleContinentPoints(85, inZones(['mountain_range', 'jungle', 'savannah'])), 8.5, { wind: 0.06, chunk: 140 });
+  addInstanced(scene, 'rock_m1', crags.slice(0, 75), 3.6, { chunk: 95 });
+  addInstanced(scene, 'rock_m2', crags.slice(75, 145), 3.2, { chunk: 95 });
+  addInstanced(scene, 'magic_rock', crags.slice(145), 3.8, { chunk: 95 });
+  addInstanced(scene, 'tree_lava_1', sampleContinentPoints(85, inZones(['mountain_range', 'jungle', 'savannah'])), 8.5, { chunk: 95 });
 
   // 7. Frozen Tundra & Lost Island Icy Blue Gradient Pines & Glacial Boulders
   const snowPines = sampleContinentPoints(250, inZones(['tundra', 'lost_island', 'mountain_range']));
   snowPines.forEach((p) => colliders.push({ x: p.x, z: p.z, r: 0.65 }));
-  scatterInstanced(scene, 'pine_snow', snowPines.slice(0, 90), 10.4, { wind: 0.06, chunk: 140 });
-  scatterInstanced(scene, 'ct_ice_tree_1', snowPines.slice(90, 170), 9.8, { wind: 0.06, chunk: 140 });
-  scatterInstanced(scene, 'ct_ice_tree_2', snowPines.slice(170), 9.4, { wind: 0.06, chunk: 140 });
-  scatterInstanced(scene, 'rock_snow', sampleContinentPoints(160, inZones(['tundra', 'lost_island'])), 2.2, { chunk: 140 });
+  addInstanced(scene, 'pine_snow', snowPines.slice(0, 90), 10.4, { chunk: 95 });
+  addInstanced(scene, 'ct_ice_tree_1', snowPines.slice(90, 170), 9.8, { chunk: 95 });
+  addInstanced(scene, 'ct_ice_tree_2', snowPines.slice(170), 9.4, { chunk: 95 });
+  addInstanced(scene, 'rock_snow', sampleContinentPoints(160, inZones(['tundra', 'lost_island'])), 2.2, { shadows: false, chunk: 95 });
 
   return grassMeshes;
 }
 
 // ---------- ambient biome particles ----------
 function particles(scene) {
-  const N = 450;
+  const N = 220;
   const geo = new THREE.BufferGeometry();
   const pos = new Float32Array(N * 3);
   const col = new Float32Array(N * 3);
@@ -972,7 +979,7 @@ export function buildWorld(scene, isMobile = false) {
     update(dt, focus, camPos) {
       t += dt;
       windUniforms.uTime.value = t;
-      vol.update(dt, t);
+      vol.update(dt, t, focus);
       if (ter.water) {
         ter.water.position.y = -0.85 + Math.sin(t * 1.8) * 0.08;
       }
@@ -995,10 +1002,19 @@ export function buildWorld(scene, isMobile = false) {
 
       sun.position.set(focus.x + 40, 75, focus.z + 25);
       sun.target.position.set(focus.x, 0, focus.z);
-      if (camPos) {
-        for (const g of grass) {
+      const refPos = focus || camPos;
+      if (refPos) {
+        for (let i = 0; i < grass.length; i++) {
+          const g = grass[i];
           const s = g.boundingSphere;
-          if (s) g.visible = s.center.distanceTo(camPos) < 220;
+          if (s) {
+            const d = s.center.distanceTo(refPos);
+            const vis = d < 215 + s.radius;
+            g.visible = vis;
+            if (vis && g.userData.canShadow) {
+              g.castShadow = d < 88 + s.radius * 0.5;
+            }
+          }
         }
       }
     },

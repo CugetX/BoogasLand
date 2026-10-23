@@ -394,9 +394,13 @@ export function makeChest(color) {
   const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.9, 30, 16, 1, true), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
   beam.position.y = 15;
   g.add(beam);
-  const glow = new THREE.PointLight(color, 6, 6, 2);
-  glow.position.y = 1.2;
-  g.add(glow);
+  const glowRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.85, 1.45, 24),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.45, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending })
+  );
+  glowRing.rotation.x = -Math.PI / 2;
+  glowRing.position.y = 0.05;
+  g.add(glowRing);
   g.userData.beam = beam;
   return g;
 }
