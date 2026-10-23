@@ -2041,12 +2041,13 @@ export class Game {
       this.raidArrow.visible = true;
       if (this.raidArrow.userData.lblObj) this.raidArrow.userData.lblObj.visible = true;
       this.raidArrow.position.set(
-        p.pos.x + rnx * 2.1,
-        p.pos.y + 2.15 + Math.sin(t * 9) * 0.16,
-        p.pos.z + rnz * 2.1
+        p.pos.x + rnx * 1.65,
+        p.pos.y + 1.35 + Math.sin(t * 9) * 0.12,
+        p.pos.z + rnz * 1.65
       );
       this.raidArrow.lookAt(campRaider.pos.x, this.raidArrow.position.y, campRaider.pos.z);
-      const pulse = 1 + Math.sin(t * 10) * 0.14;
+      const rBaseS = this.isTouch ? 0.65 : 0.82;
+      const pulse = rBaseS * (1 + Math.sin(t * 10) * 0.12);
       this.raidArrow.scale.set(pulse, pulse, pulse);
       if (this.raidArrow.userData.lblEl) {
         const statusTxt = campRaider.raidedFrom === p.camp
@@ -2075,7 +2076,9 @@ export class Game {
       if (dist > 2.2) {
         this.guideArrow.visible = true;
         const nx = dx / dist, nz = dz / dist;
-        this.guideArrow.position.set(p.pos.x + nx * 1.9, p.pos.y + 1.85 + Math.sin(t * 5) * 0.14, p.pos.z + nz * 1.9);
+        const gs = this.isTouch ? 0.56 : 0.74;
+        this.guideArrow.scale.set(gs, gs, gs);
+        this.guideArrow.position.set(p.pos.x + nx * 1.45, p.pos.y + 1.12 + Math.sin(t * 5) * 0.09, p.pos.z + nz * 1.45);
         this.guideArrow.lookAt(targetPos.x, this.guideArrow.position.y, targetPos.z);
         this.guideRing.visible = true;
         this.guideRing.position.set(targetPos.x, heightAt(targetPos.x, targetPos.z) + 0.08, targetPos.z);

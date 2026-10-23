@@ -1027,19 +1027,32 @@ body.is-touch #touch-controls {
   .btn-mario small { font-size: 12px; }
 
   #topleft { top: 8px; left: 8px; gap: 4px; }
-  #dust { font-size: 22px; padding: 2px 14px 2px 4px; }
-  #dust img { width: 30px; height: 30px; }
+  #dust { font-size: 18px; padding: 2px 11px 2px 4px; border-width: 2.5px; box-shadow: 0 3px 0 rgba(0,0,0,0.35); }
+  #dust img { width: 24px; height: 24px; }
+  .bag-hud { padding: 3px 8px; gap: 5px; border-radius: 10px; border-width: 2px; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.28); }
+  .bag-hud .bh-tag { font-size: 9px; padding: 1px 5px; border-radius: 5px; }
+  .bag-hud .bh-val { font-size: 11px; }
   #dust-rate { font-size: 11px; padding-left: 4px; }
   #lock { font-size: 10px; padding: 4px 8px; }
   .map-pill { font-size: 11px; padding: 4px 10px; }
 
-  #quest-box {
+  /* Hide redundant weapon/suit slots in hotbar on touch devices (BONK button already shows weapon) */
+  #hb-weapon, #hb-boots { display: none !important; }
+
+  #quest-box,
+  #quest-box.starter-guide {
     top: 8px;
-    min-width: 220px;
-    max-width: min(400px, 52vw);
-    padding: 6px 12px;
-    border-radius: 14px;
+    min-width: 0;
+    max-width: min(340px, 50vw);
+    padding: 5px 10px;
+    border-radius: 12px;
+    border-width: 2.5px;
+    box-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
   }
+  .tut-card-inner { gap: 8px; }
+  .tut-card-img { width: 28px; height: 28px; }
+  .tut-card-title { font-size: 12.5px; }
+  .tut-card-desc { font-size: 11px; line-height: 1.18; }
   #quest-box .q-step { font-size: 11px; }
   #quest-box .q-text { font-size: 12px; line-height: 1.2; }
   #quest-box .q-reward { font-size: 10px; padding: 1px 6px; }
@@ -1048,13 +1061,14 @@ body.is-touch #touch-controls {
   #minimap {
     top: 8px;
     right: 8px;
-    width: 110px !important;
-    height: 110px !important;
+    width: 96px !important;
+    height: 96px !important;
+    border-width: 3px;
   }
   #leaderboard {
-    top: 124px;
+    top: 112px;
     right: 8px;
-    width: 158px;
+    width: 152px;
     padding: 5px 7px;
   }
   #leaderboard .lb-title { font-size: 10px; margin-bottom: 3px; }
@@ -1062,24 +1076,32 @@ body.is-touch #touch-controls {
   .lb-name, .lb-rank, .lb-rate { font-size: 10px; }
   .lb-gate { font-size: 9px; padding: 1px 3px; }
 
-  #toasts { top: 245px; right: 8px; }
-  .toast { font-size: 11px; padding: 4px 9px; max-width: 240px; }
-  .toast img { width: 22px; height: 22px; }
+  #toasts { top: 220px; right: 8px; }
+  .toast { font-size: 11px; padding: 4px 9px; max-width: 220px; }
+  .toast img { width: 20px; height: 20px; }
 
-  #hotbar { bottom: 14px; gap: 6px; }
-  .hb { width: 62px; height: 62px; border-radius: 12px; }
-  .hb > img, .gicon, .gicon img { width: 32px; height: 32px; }
-  .gicon img.badge { width: 18px; height: 18px; }
-  .hb em { font-size: 9px; }
-  .fist { font-size: 24px; }
+  #hotbar { bottom: 12px; gap: 6px; }
+  .hb { width: 52px; height: 52px; border-radius: 11px; }
+  .hb > img, .gicon, .gicon img { width: 26px; height: 26px; }
+  .gicon img.badge { width: 15px; height: 15px; }
+  .hb em { font-size: 8.5px; }
+  .fist { font-size: 20px; }
 
-  #prompt { bottom: 84px; font-size: 12px; padding: 5px 12px; min-width: 180px; max-width: 56vw; }
-  #carry { bottom: 134px; font-size: 12px; padding: 4px 10px; }
+  #prompt { bottom: 74px; font-size: 11.5px; padding: 4px 10px; min-width: 150px; max-width: 56vw; }
+  #carry { display: none !important; }
 
+  #banner { top: 138px; width: 88vw; max-width: 340px; }
+  #banner b { font-size: 18px; -webkit-text-stroke: 1.5px #000; text-shadow: 0 2px 0 #000; line-height: 1.1; }
+  #banner small { font-size: 10.5px; padding: 3px 10px; border-radius: 10px; line-height: 1.2; max-width: 84vw; }
+
+  .lbl-name { font-size: 12px; }
+  .lbl-name > b { padding: 1px 6px; }
+  .bounty-tag { font-size: 10px; padding: 1px 6px; margin-bottom: 2px; }
+  .speech { font-size: 10px !important; padding: 1px 6px !important; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
   .lbl-egg { font-size: 10px; padding: 2px 6px; border-radius: 8px; }
   .lbl-egg b { font-size: 11px; }
   .lbl-egg .cost { font-size: 12px; }
-  .lbl-camp { font-size: 15px; }
+  .lbl-camp { font-size: 13px; }
   .lbl-nest { font-size: 10px; padding: 2px 6px; }
   .lbl-small { font-size: 10px; padding: 1px 5px; }
 
@@ -1092,38 +1114,123 @@ body.is-touch #touch-controls {
 @media (max-height: 520px) {
   /* Landscape phone layout: keep right side clean for Minimap + Touch Action Buttons */
   #leaderboard { display: none; }
-  #minimap { width: 92px !important; height: 92px !important; }
-  #toasts { top: 106px; right: 8px; }
-  #quest-box { top: 6px; padding: 4px 10px; max-width: 46vw; }
+  #minimap { width: 82px !important; height: 82px !important; }
+  #toasts { top: 96px; right: 8px; }
+  #quest-box, #quest-box.starter-guide { top: 6px; padding: 4px 9px; max-width: 44vw; }
   #quest-box .q-step { font-size: 10px; }
   #quest-box .q-text { font-size: 11px; }
   #hotbar { bottom: 10px; }
-  .hb { width: 54px; height: 54px; }
-  .hb > img, .gicon, .gicon img { width: 28px; height: 28px; }
-  #prompt { bottom: 72px; }
+  .hb { width: 48px; height: 48px; }
+  .hb > img, .gicon, .gicon img { width: 24px; height: 24px; }
+  #prompt { bottom: 66px; }
 }
 
 @media (max-width: 600px) {
-  /* Portrait phone layout: stack quest box cleanly below top-left / minimap if narrow */
-  #quest-box {
-    top: 122px;
-    left: 50%;
-    transform: translateX(-50%);
-    max-width: 94vw;
-    width: 92vw;
+  /* Portrait phone layout: sleek, uncluttered top & bottom bars */
+  #minimap {
+    top: 8px;
+    right: 8px;
+    width: 80px !important;
+    height: 80px !important;
+    border-width: 3px;
   }
   #leaderboard {
     display: none;
   }
+  #quest-box,
+  #quest-box.starter-guide {
+    top: 66px;
+    left: 8px;
+    transform: none;
+    width: auto;
+    max-width: calc(100vw - 100px);
+    padding: 5px 9px;
+  }
+  #toasts {
+    top: 96px;
+    right: 8px;
+  }
+  #touch-joy {
+    left: 10px;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    width: 90px;
+    height: 90px;
+  }
+  .joy-ring {
+    width: 80px;
+    height: 80px;
+    border-width: 3px;
+  }
+  #touch-stick {
+    width: 36px;
+    height: 36px;
+    border-width: 2.5px;
+  }
+  .joy-lbl {
+    display: none;
+  }
+  #touch-actions {
+    right: 10px;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    gap: 5px;
+  }
+  .t-row {
+    gap: 5px;
+  }
+  .t-btn {
+    border-width: 2.5px;
+    box-shadow: 0 3px 0 #000;
+  }
+  .t-btn.bonk {
+    width: 60px;
+    height: 60px;
+  }
+  .t-btn.jump {
+    width: 46px;
+    height: 46px;
+  }
+  .t-btn.act {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+  }
+  .t-btn .t-img {
+    width: 22px;
+    height: 22px;
+  }
+  .t-btn .t-ico {
+    font-size: 16px;
+  }
+  .t-btn em {
+    font-size: 8px;
+    margin-top: 1px;
+  }
   #hotbar {
-    bottom: 162px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    left: calc(50% - 14px);
+    transform: translateX(-50%);
+    gap: 5px;
+  }
+  .hb {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    border-width: 2.5px;
+    box-shadow: 0 3px 0 #000;
+  }
+  .hb > img, .gicon, .gicon img {
+    width: 21px;
+    height: 21px;
+  }
+  .hb em {
+    font-size: 7.5px;
+    bottom: 2px;
   }
   #prompt {
-    bottom: 232px;
-    max-width: 90vw;
-  }
-  #carry {
-    bottom: 284px;
+    bottom: 132px;
+    max-width: 84vw;
+    font-size: 11px;
+    padding: 4px 10px;
   }
 }
 
@@ -1189,15 +1296,18 @@ body.is-touch #touch-controls {
 }
 @media (max-width: 920px) {
   .quick-forge {
-    top: 150px;
+    top: 138px;
     bottom: auto;
-    left: 10px;
-    font-size: 11px;
-    padding: 5px 10px;
+    left: 8px;
+    font-size: 10.5px;
+    padding: 4px 8px;
+    border-radius: 10px;
+    border-width: 2px;
+    box-shadow: 0 3px 0 #143617;
   }
   .quick-forge img {
-    width: 22px;
-    height: 22px;
+    width: 18px;
+    height: 18px;
   }
 }
 

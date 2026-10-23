@@ -280,16 +280,17 @@ export class Actor {
     tag.position.y = 2.4;
     this.root.add(tag);
 
-    // 3D Unbanked Loot Backpack Stack (Gold Sack + Glowing Gems on the Booga's back!)
+    // 3D Unbanked Loot Backpack Stack (Compact Gold Pouch on the Booga's back!)
     this.lootPack = new THREE.Group();
-    const sack = spawn('gold_bag', 0.42);
-    sack.position.set(0, 1.05, -0.34);
-    sack.rotation.x = -0.25;
+    this.lootPack.position.set(0, 0.92, -0.26);
+    const sack = spawn('gold_bag', 0.32);
+    sack.position.set(0, 0, 0);
+    sack.rotation.x = -0.2;
     this.lootPack.add(sack);
-    const gem1 = tint(spawn('gem_pink', 0.28), '#c77dff', { emissive: '#9d4edd', emissiveIntensity: 1.5 });
-    gem1.position.set(0.14, 1.32, -0.36);
-    const gem2 = tint(spawn('gem_pink', 0.25), '#ffd615', { emissive: '#ff9d00', emissiveIntensity: 1.5 });
-    gem2.position.set(-0.14, 1.3, -0.36);
+    const gem1 = tint(spawn('gem_pink', 0.16), '#c77dff', { emissive: '#9d4edd', emissiveIntensity: 1.4 });
+    gem1.position.set(0.08, 0.18, -0.02);
+    const gem2 = tint(spawn('gem_pink', 0.15), '#ffd615', { emissive: '#ff9d00', emissiveIntensity: 1.4 });
+    gem2.position.set(-0.08, 0.17, -0.02);
     this.lootPack.add(gem1, gem2);
     this.lootPack.visible = false;
     this.root.add(this.lootPack);
@@ -379,14 +380,22 @@ export class Actor {
     return Math.round(wPower + sBonus + baseBonus + shrines + feats + banked);
   }
   get speed() {
-    let s = BAL.run * (this.isPlayer ? 1 : 0.93);
-    if (this.gear.boots) s *= 1.2;
-    if (this.treasures?.jungle_treasure || this.camp?.nests?.[1]?.content) s *= 1.15;
-    if (this.suit && GEAR[this.suit]) s *= 1 + (GEAR[this.suit].speedBonus || 0);
-    if (this.carrying) s *= BAL.carryMul;
-    if (this.raidedFrom) s *= 0.90;
-    if (!this.isPlayer && this.defendingCamp) s *= 1.24;
-    return s;
+    if (this.isPlayer) {
+      let s = BAL.run * 1.12;
+      if (this.gear.boots) s *= 1.2;
+      if (this.treasures?.jungle_treasure || this.camp?.nests?.[1]?.content) s *= 1.15;
+      if (this.suit && GEAR[this.suit]) s *= 1 + (GEAR[this.suit].speedBonus || 0);
+      if (this.carrying) s *= BAL.carryMul;
+      if (this.game?.activeCampRaider) s *= 1.18; // Pursuit adrenaline boost when chasing a Camp Raider!
+      return s;
+    }
+    // Rival bots move noticeably slower than the player so you can always chase & catch them!
+    let botSpeed = BAL.run * 0.72;
+    if (this.suit && GEAR[this.suit]) botSpeed *= 1 + Math.min(0.06, (GEAR[this.suit].speedBonus || 0) * 0.35);
+    if (this.carrying) botSpeed *= BAL.carryMul;
+    if (this.unbankedDust > 0 || this.unbankedItemCount > 0) botSpeed *= 0.88; // Weighed down by carried Loot Bag
+    if (this.raidedFrom) botSpeed *= 0.78; // Heavy stolen Vault haul slows raiders down so you can catch them!
+    return Math.min(botSpeed, BAL.run * 0.76);
   }
   get incomeMult() {
     let m = 1 + 0.25 * (this.gear.totem || 0);
@@ -572,9 +581,9 @@ export class Actor {
     if (this.lootPack) {
       this.lootPack.visible = hasUnbanked && !this.carrying;
       if (this.lootPack.visible) {
-        const packScale = Math.min(1.65, 0.78 + (ubDust / 180) * 0.45 + ubItems * 0.08);
+        const packScale = Math.min(1.05, 0.72 + (ubDust / 400) * 0.2 + ubItems * 0.025);
         this.lootPack.scale.setScalar(packScale);
-        this.lootPack.position.y = b.body ? b.body.position.y * 0.5 : 0;
+        this.lootPack.position.y = 0.92 + (b.body ? b.body.position.y * 0.5 : 0);
       }
     }
     if (this.bountyEl) {

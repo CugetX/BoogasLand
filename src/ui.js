@@ -558,17 +558,18 @@ export class UI {
     const ubItems = p.unbankedItemCount || 0;
     const inCamp = p.camp && p.camp.inside(p.pos, 0.8);
     if (ubDust > 0 || ubItems > 0) {
-      const bagKey = `${ubDust}:${ubItems}:${p.raidedFrom ? 1 : 0}`;
+      const bagKey = `${ubDust}:${ubItems}:${p.raidedFrom ? p.raidedFrom.ownerName : 0}`;
       if (this._lastBagKey !== bagKey) {
         this._lastBagKey = bagKey;
-        bagHud.innerHTML = `<span class="bh-tag">LOOT BAG · AT RISK</span><span class="bh-val">${ubDust > 0 ? `${fmt(ubDust)} Dust` : ''}${ubDust > 0 && ubItems > 0 ? ' + ' : ''}${ubItems > 0 ? `${ubItems} Items` : ''}</span>`;
+        const tagTxt = p.raidedFrom ? `RAID LOOT · BANK AT CAMP` : `LOOT BAG · AT RISK`;
+        bagHud.innerHTML = `<span class="bh-tag">${tagTxt}</span><span class="bh-val">${ubDust > 0 ? `${fmt(ubDust)} Dust` : ''}${ubDust > 0 && ubItems > 0 ? ' + ' : ''}${ubItems > 0 ? `${ubItems} Items` : ''}</span>`;
       }
       bagHud.classList.remove('hidden');
       bagHud.classList.toggle('raided', !!p.raidedFrom);
     } else if (inCamp) {
       if (this._lastBagKey !== 'safe') {
         this._lastBagKey = 'safe';
-        bagHud.innerHTML = `<span class="bh-tag safe">INSIDE YOUR CAMP</span><span class="bh-val">Loot Vaulted</span>`;
+        bagHud.innerHTML = `<span class="bh-tag safe">CAMP SAFE</span><span class="bh-val">Vaulted</span>`;
       }
       bagHud.classList.remove('hidden', 'raided');
     } else {
@@ -587,10 +588,15 @@ export class UI {
     // hotbar (progressively reveal buttons as tutorial cards introduce them)
     const w = p.weapon;
     setHtml($('#hb-weapon'), w ? `${gearIcon(w)}<em>${GEAR[w].name}</em>` : `<span class="fist">Club</span><em>Club</em>`);
+    const bonkImg = document.querySelector('#btn-touch-bonk .t-img');
+    if (bonkImg) {
+      const wSrc = w && GEAR[w]?.weaponImg ? GEAR[w].weaponImg : '/assets/weapons/WoodenClub.png';
+      if (bonkImg.getAttribute('src') !== wSrc) bonkImg.setAttribute('src', wSrc);
+    }
     const hbTrap = $('#hb-trap');
     if (hbTrap) {
       hbTrap.classList.toggle('hidden', curStep < 3 && p.traps <= 0);
-      setHtml(hbTrap, `${gearIcon('trap')}<span>${p.traps}</span><em>Traps [G]</em>`);
+      setHtml(hbTrap, `${gearIcon('trap')}<span>${p.traps}</span><em>${g.isTouch ? 'Traps' : 'Traps [G]'}</em>`);
     }
     const hbSuit = $('#hb-boots');
     if (hbSuit) {
@@ -607,16 +613,36 @@ export class UI {
       const canUp = nxt && p.dust >= nxt.cost;
       hbBase.classList.toggle('tut-pulse', !!canUp);
       hbBase.title = nxt ? `Upgrade Camp to Lv.${nxt.level} ${nxt.name} (${nxt.cost} Banked Dust) [Key U]` : 'Max Camp Level 5';
-      const baseTxt = nxt ? `Lv.${p.camp.level} Camp [U]` : `Lv.5 MAX`;
+      const baseTxt = nxt ? (g.isTouch ? `Lv.${p.camp.level} Camp` : `Lv.${p.camp.level} Camp [U]`) : `Lv.5 MAX`;
       if (hbBaseLbl.textContent !== baseTxt) hbBaseLbl.textContent = baseTxt;
     }
     const hbCraft = $('#hb-craft');
     if (hbCraft) {
       hbCraft.classList.remove('hidden');
       hbCraft.classList.toggle('tut-pulse', (g.mode === 'tutorial' && g.tutStep === 3) || (g.mode === 'valley' && curStep === 4));
+      const em = hbCraft.querySelector('em');
+      if (em) {
+        const txt = g.isTouch ? 'Forge' : 'Forge [C]';
+        if (em.textContent !== txt) em.textContent = txt;
+      }
+    }
+    const hbMap = $('#hb-map');
+    if (hbMap) {
+      const em = hbMap.querySelector('em');
+      if (em) {
+        const txt = g.isTouch ? 'Map' : 'Map [M]';
+        if (em.textContent !== txt) em.textContent = txt;
+      }
     }
     const hbRelic = document.querySelector('[data-open="treasure"]');
-    if (hbRelic) hbRelic.classList.toggle('hidden', inStarterSteps);
+    if (hbRelic) {
+      hbRelic.classList.toggle('hidden', inStarterSteps);
+      const em = hbRelic.querySelector('em');
+      if (em) {
+        const txt = g.isTouch ? 'Relics' : 'Relics [T]';
+        if (em.textContent !== txt) em.textContent = txt;
+      }
+    }
 
     // Throttle recursive recipe checks to every 0.45s instead of 60 times/sec
     this._craftCheckT = (this._craftCheckT || 0) - dt;
@@ -628,17 +654,9 @@ export class UI {
     const craftBadge = $('#craft-badge');
     if (craftBadge) craftBadge.classList.toggle('hidden', !this._cachedCanCraft);
 
-    // carrying / unbanked loot risk bar
+    // #bag-hud in #topleft already shows carried loot bag / raid status cleanly; keep #carry hidden so the center of the screen stays unobstructed
     const c = $('#carry');
-    if (p.raidedFrom) {
-      setHtml(c, `<b>CAMP RAID ACTIVE:</b> Carrying <b>${p.raidedFrom.ownerName}'s Vault Loot (${ubDust} Dust)</b> — Return to <b>YOUR CAMP</b> to Bank (+100 Bonus)`);
-      c.classList.remove('hidden');
-      c.classList.add('stolen');
-    } else if (ubDust > 0 || ubItems > 0) {
-      setHtml(c, `<b>UNBANKED LOOT BAG:</b> ${ubDust > 0 ? `<span class="c-hl">${ubDust} Dust</span>` : ''}${ubDust > 0 && ubItems > 0 ? ' · ' : ''}${ubItems > 0 ? `<span class="c-hl">${ubItems} Materials</span>` : ''} — Return to <b>YOUR CAMP</b> to Bank${ubDust >= 50 ? ' <span class="c-bonus">(+15% Bonus)</span>' : ''}`);
-      c.classList.remove('hidden');
-      c.classList.toggle('stolen', ubDust >= 80 || ubItems >= 4);
-    } else c.classList.add('hidden');
+    if (c) c.classList.add('hidden');
 
     // 1-Tap Quick-Forge HUD Pill (uses only Banked Camp Materials!)
     let qf = $('#quick-forge');
@@ -658,10 +676,10 @@ export class UI {
     if (qr && !this.panelOpen) {
       const qName = qr.gear ? GEAR[qr.out].name : ITEMS[qr.out].name;
       const qIcon = qr.gear && GEAR[qr.out].weaponImg ? GEAR[qr.out].weaponImg : ICON(qr.gear ? GEAR[qr.out].icon : qr.out);
-      const qKey = qr.out + ':' + qName;
+      const qKey = qr.out + ':' + qName + ':' + (g.isTouch ? 1 : 0);
       if (this._lastQfKey !== qKey) {
         this._lastQfKey = qKey;
-        qf.innerHTML = `<img src="${qIcon}"><span><b>FORGE [R]:</b> ${qName}</span>`;
+        qf.innerHTML = `<img src="${qIcon}"><span><b>${g.isTouch ? 'FORGE:' : 'FORGE [R]:'}</b> ${qName}</span>`;
       }
       qf.classList.remove('hidden');
     } else {
@@ -723,16 +741,16 @@ export class UI {
         actBtn.classList.add('ready');
         actLbl.textContent = {
           upgrade_base: 'UPGRADE',
-          zone_portal: 'WORLD MAP',
-          forge_anvil: 'FORGE [E]',
-          relic_altar: 'TRADE COINS',
-          raid_vault: 'RAID VAULT',
-          gather: 'MINE GEODE',
-          chest: 'OPEN CHEST',
-        }[it.kind] || 'ACT [E]';
+          zone_portal: 'MAP',
+          forge_anvil: 'FORGE',
+          relic_altar: 'RELICS',
+          raid_vault: 'RAID',
+          gather: 'MINE',
+          chest: 'OPEN',
+        }[it.kind] || 'ACT';
       } else {
         actBtn.classList.remove('ready');
-        actLbl.textContent = 'ACT [E]';
+        actLbl.textContent = 'ACT';
       }
     }
 
