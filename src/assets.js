@@ -9,13 +9,11 @@ import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
  * Bakes Creative Trio's signature vertical color gradient (warm earth base -> rich midtones -> sunlit crown)
  * directly into geometry vertex colors at asset load time so all models share standard pre-compiled WebGL shaders!
  */
-export function bakeStylizedVertexGradient(geo, minY = 0, maxY = 5.0, strength = 0.48) {
-  if (!geo || !geo.attributes?.position || geo.userData?.ctBaked) return geo;
-  geo.userData = geo.userData || {};
-  geo.userData.ctBaked = true;
+export function bakeStylizedVertexGradient(geo, minY = 0, maxY = 5.0, strength = 0.48, useExistingColor = false) {
+  if (!geo || !geo.attributes?.position || geo.attributes.color?._ctBaked) return geo;
   const pos = geo.attributes.position;
   const norm = geo.attributes.normal;
-  const existing = geo.attributes.color;
+  const existing = useExistingColor ? geo.attributes.color : null;
   const count = pos.count;
   const out = new Float32Array(count * 3);
   const span = Math.max(0.4, maxY - minY);
@@ -46,15 +44,22 @@ export function bakeStylizedVertexGradient(geo, minY = 0, maxY = 5.0, strength =
     const mg = 1.0 + (gg * wg - 1.0) * strength;
     const mb = 1.0 + (gb * wb - 1.0) * strength;
 
-    const er = existing ? existing.getX(i) : 1.0;
-    const eg = existing ? existing.getY(i) : 1.0;
-    const eb = existing ? existing.getZ(i) : 1.0;
+    let er = existing ? existing.getX(i) : 1.0;
+    let eg = existing ? existing.getY(i) : 1.0;
+    let eb = existing ? existing.getZ(i) : 1.0;
+    if (er + eg + eb < 0.05) {
+      er = 1.0;
+      eg = 1.0;
+      eb = 1.0;
+    }
 
     out[i * 3] = er * mr;
     out[i * 3 + 1] = eg * mg;
     out[i * 3 + 2] = eb * mb;
   }
-  geo.setAttribute('color', new THREE.BufferAttribute(out, 3));
+  const colorAttr = new THREE.BufferAttribute(out, 3);
+  colorAttr._ctBaked = true;
+  geo.setAttribute('color', colorAttr);
   return geo;
 }
 
@@ -147,12 +152,13 @@ export async function loadAssets(onProgress) {
             if (o.geometry && !o.geometry.attributes.normal) {
               o.geometry.computeVertexNormals();
             }
+            const mats = Array.isArray(o.material) ? o.material : [o.material];
+            const hadVCol = mats.some((m) => m && m.vertexColors);
             if (o.geometry && !isDino) {
-              bakeStylizedVertexGradient(o.geometry, box.min.y, box.max.y, 0.52);
+              bakeStylizedVertexGradient(o.geometry, box.min.y, box.max.y, 0.52, hadVCol);
             }
             o.castShadow = true;
             o.receiveShadow = true;
-            const mats = Array.isArray(o.material) ? o.material : [o.material];
             mats.forEach((m) => {
               if (!m) return;
               if (m.map) m.map.anisotropy = 4;
