@@ -1,0 +1,22 @@
+{
+    "name": "boogas-egg-heist",
+    "version": "1.0.0",
+    "scripts": {
+        "dev": "vite --port 5179",
+        "build": "vite build",
+        "preview": "vite preview --port 5180",
+        "test": "node tools/play.mjs tools/shots"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "description": "BOOGAS: Egg Heist - caveman dino-egg base raider (Three.js)",
+    "dependencies": {
+        "three": "^0.169.0"
+    },
+    "devDependencies": {
+        "playwright-core": "^1.61.1",
+        "vite": "^5.4.21"
+    },
+    "type": "module"
+}

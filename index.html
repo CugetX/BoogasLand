@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#182848" />
+  <link rel="manifest" href="/manifest.json" />
+  <title>BOOGAS: Geode Forge & Heist</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/style.css" />
+  <link rel="icon" href="/assets/geodes/opal/stage_4.png" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- Loading -->
+  <div id="loading">
+    <div class="logo"><span class="m-y">B</span><span class="m-g">O</span><span class="m-b">O</span><span class="m-r">G</span><span class="m-y">A</span><span class="m-g">S</span></div>
+    <div class="sub">GEODE FORGE &amp; HEIST</div>
+    <div class="loadbar"><i id="loadfill"></i></div>
+    <div id="loadtxt">Sculpting 3D Geodes &amp; stoking the Volcano Forge...</div>
+  </div>
+
+  <!-- Title -->
+  <div id="title" class="hidden">
+    <div class="title-card">
+      <div class="logo"><span class="m-y">B</span><span class="m-g">O</span><span class="m-b">O</span><span class="m-r">G</span><span class="m-y">A</span><span class="m-g">S</span></div>
+      <div class="sub">GEODE FORGE &amp; HEIST</div>
+      <div class="mode-btns" style="margin-top: 32px;">
+        <button id="btn-play" class="btn-mario gold">PLAY</button>
+      </div>
+      <button id="btn-tutorial" class="hidden">Practice Island</button>
+      <button id="btn-reset" class="ghost">Reset Save &amp; Start from Step 1</button>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="topleft">
+      <div id="dust" title="Camp Vault Dust (Safe Storage)"><img src="/assets/items/dust_icon.png"><span id="dust-amt">0</span></div>
+      <div id="dust-rate"></div>
+      <div id="lock"></div>
+      <button id="btn-map-switch" class="map-pill">Geode Academy</button>
+    </div>
+    <div id="quest-box"></div>
+    <div id="event-bar" class="hidden"></div>
+    <canvas id="minimap" width="180" height="180"></canvas>
+    <div id="leaderboard"></div>
+    <div id="toasts"></div>
+    <div id="banner"></div>
+    <div id="carry" class="hidden"></div>
+    <div id="prompt" class="hidden"></div>
+    <div id="hotbar">
+      <div class="hb" id="hb-weapon"></div>
+      <div class="hb" id="hb-trap"></div>
+      <div class="hb hidden" id="hb-boots"><span class="gicon"><img src="/assets/items/fur.png"></span><em>Suit / Boots</em></div>
+      <button class="hb btn" id="hb-base"><img src="/assets/items/gold.png"><em id="hb-base-lbl">Upgrade Base [U]</em></button>
+      <button class="hb btn" id="hb-craft" data-open="craft"><img src="/assets/weapons/Lava Warhammer.png"><em>Forge [C]</em><b id="craft-badge" class="craft-badge hidden">!</b></button>
+      <button class="hb btn" id="hb-map" data-open="map"><img src="/assets/treasures/cave_coin.png"><em>Map [M]</em></button>
+      <button class="hb btn" data-open="treasure"><img src="/assets/treasures/cave_treasure_icon.png"><em>Relics [T]</em></button>
+    </div>
+    <div id="clickhint" class="hidden">Click to control camera</div>
+    <div id="crosshair"></div>
+    <div id="treasure-pop"></div>
+    <div id="hitflash"></div>
+    <div id="touch-controls">
+      <div id="touch-joy">
+        <div class="joy-ring"><div id="touch-stick"></div></div>
+        <span class="joy-lbl">MOVE</span>
+      </div>
+      <div id="touch-actions">
+        <button id="btn-touch-act" class="t-btn act"><img class="t-img" src="/assets/items/dust_icon.png"><em id="touch-act-lbl">ACT [E]</em></button>
+        <div class="t-row">
+          <button id="btn-touch-jump" class="t-btn jump"><span class="t-ico">▲</span><em>JUMP</em></button>
+          <button id="btn-touch-bonk" class="t-btn bonk"><img class="t-img" src="/assets/weapons/WoodenClub.png"><em>BONK</em></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panels -->
+  <div id="panel-craft" class="panel hidden">
+    <div class="panel-card wide forge-modal-card">
+      <button class="x" data-close>✕</button>
+      <div class="forge-header">
+        <h2><img src="/assets/weapons/Lava Warhammer.png"> Forge &amp; Camp Barricades</h2>
+        <div id="forge-mat-strip" class="forge-mat-strip"></div>
+      </div>
+      <div id="craft-tut-banner"></div>
+      <div id="recipe-list" class="forge-body"></div>
+      <div id="inv-grid" class="hidden"></div>
+      <div id="gear-grid" class="hidden"></div>
+    </div>
+  </div>
+  <div id="panel-map" class="panel hidden">
+    <div class="panel-card wide map-modal-card">
+      <button class="x" data-close>✕</button>
+      <h2><img src="/assets/treasures/cave_coin.png"> The Boogas Continent — 12 Biomes</h2>
+      <div class="booga-map-layout">
+        <div class="booga-map-stage" id="booga-map-stage">
+          <img src="/assets/booga_map.png" alt="Boogas Map" class="booga-map-img" />
+          <div id="booga-map-pins"></div>
+        </div>
+        <div class="booga-map-sidebar" id="booga-map-sidebar"></div>
+      </div>
+    </div>
+  </div>
+  <div id="panel-treasure" class="panel hidden">
+    <div class="panel-card">
+      <button class="x" data-close>✕</button>
+      <h2><img src="/assets/treasures/runes_treasure_icon.png"> Camp Trophy Shrines &amp; Relics</h2>
+      <p class="dim">Awaken all 4 Camp Trophy Shrines by slaying Biome Bosses, opening Relic Chests, or trading 3 Biome Coins at the Booga Town Relic Altar!</p>
+      <div id="treasure-grid"></div>
+      <p id="stats"></p>
+    </div>
+  </div>
+  <div id="panel-victory" class="panel hidden">
+    <div class="panel-card victory-card">
+      <div class="vic-stars">★ ★ ★</div>
+      <h2 class="vic-title">GEODE ACADEMY COMPLETE!</h2>
+      <div class="vic-sub">🏆 CERTIFIED MASTER GEODE MINER 🏆</div>
+      <p class="vic-desc">You mastered cracking wild 3D Geodes (Stages 1→7→Open), forging weapons at the Booga Town Volcano Forge, banking Unbanked Loot, locking your Camp, and bonking rivals in the Wild Frontier!</p>
+      <div class="vic-rewards">
+        <div class="vic-r-head">🎁 GRADUATION STARTER PACK UNLOCKED!</div>
+        <div class="vic-r-grid">
+          <div class="vic-item"><img src="/assets/items/dust_icon.png"><b>+250 Dust</b><small>Starting fortune</small></div>
+          <div class="vic-item"><img src="/assets/weapons/StoneClub.png"><b>Stone Club</b><small>35 Geode Dmg + 5s Dizzy!</small></div>
+          <div class="vic-item"><img src="/assets/items/vine.png"><b>2x Vine Traps</b><small>Camp defense</small></div>
+          <div class="vic-item"><img src="/assets/treasures/cave_coin.png"><b>+10% Dust Boost</b><small>Graduate medal</small></div>
+        </div>
+      </div>
+      <div class="vic-actions">
+        <button id="btn-vic-valley" class="btn-mario gold">🌋 ENTER FULL VALLEY<small>Smash 22 Geode Types, Fight 4 Bosses &amp; Rivals!</small></button>
+        <button id="btn-vic-stay" class="btn-mario green small-btn">💎 Keep Practicing Here</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

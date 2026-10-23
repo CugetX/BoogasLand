@@ -1,0 +1,22 @@
+{
+  "name": "BOOGAS: Geode Forge & Heist",
+  "short_name": "BOOGAS 3D",
+  "description": "3D Geode Hunting, Base Upgrading & Vault Heists across the 12 Zones of the Boogas Continent.",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#182848",
+  "theme_color": "#ffd615",
+  "icons": [
+    {
+      "src": "/assets/geodes/opal/stage_4.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/geodes/opal/stage_4.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

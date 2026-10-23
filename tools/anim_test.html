@@ -1,0 +1,34 @@
+<!doctype html>
+<html><body style="margin:0">
+<script type="module">
+import * as THREE from 'three';
+import { loadBoogaTemplate, Booga } from '/src/character.js';
+const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+r.setSize(1200, 500); r.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#9ab');
+scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 2));
+const d = new THREE.DirectionalLight(0xffffff, 2); d.position.set(2, 4, 3); scene.add(d);
+await loadBoogaTemplate('/models/booga_rok.glb');
+const states = [
+  (b) => { b.update(0.016, 0); },
+  (b) => { b.walkPhase = 0.6; b.speed01 = 1; b.update(0.0001, 7); },
+  (b) => { b.walkPhase = 0.6 + Math.PI; b.speed01 = 1; b.update(0.0001, 7); },
+  (b) => { b.carrying = true; b.update(0.016, 0); },
+  (b) => { b.attackT = 0.3; b.update(0.0001, 0); },
+  (b) => { b.attackT = 0.5; b.update(0.0001, 0); },
+];
+const cols = ['#ff6b6b', '#4dabf7', '#51cf66', '#ffd43b', '#cc5de8', '#ff922b'];
+states.forEach((f, i) => {
+  const b = new Booga({ shirt: cols[i] });
+  b.root.position.x = (i - 2.5) * 1.6;
+  b.root.rotation.y = i % 2 ? 0.9 : 0.4;
+  f(b);
+  scene.add(b.root);
+});
+const cam = new THREE.PerspectiveCamera(35, 1200 / 500, 0.1, 100);
+cam.position.set(0, 1.3, 10); cam.lookAt(0, 0.9, 0);
+r.render(scene, cam);
+window.__ready = true;
+</script>
+</body></html>
