@@ -3,3 +3,6 @@ dist/
 .DS_Store
 *.log
 /[0-9][0-9]_*.png
+.vercel/
+
+.vercel
