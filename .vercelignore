@@ -1,5 +1,5 @@
 node_modules
 dist
 tools
-*.png
+/[0-9][0-9]_*.png
 .git
